@@ -366,7 +366,9 @@
     const st = settings();
     gid = gid || B.newKey();
     const now = B.now();
-    const [black, white] = Math.random() < 0.5 ? [a, b] : [b, a];
+    // 흑백 추첨 (암호학적 난수로 50:50)
+    const coin = crypto.getRandomValues(new Uint32Array(1))[0] & 1;
+    const [black, white] = coin ? [a, b] : [b, a];
     const pre = {};
     for (const u of [black, white]) pre[u] = { score: S.users[u].score, placed: S.users[u].placed || 0 };
     const g = {
@@ -694,6 +696,12 @@
     }
     if ((g.status === 'finished' || g.status === 'cancelled') && !g.scored && (participant || S.isMaster)) finalize(g.id);
     if (g.status === 'active') G.hideOverlay = false;
+    // 대국 시작 시 흑백 추첨 결과를 잠깐 보여줌
+    if (g.status === 'active' && participant && g.matchType !== 'ai' && !G.announced && !(g.moves || []).length) {
+      G.announced = true;
+      G.announceUntil = Date.now() + 2500;
+      setTimeout(() => { if (S.game === G) renderGame(); }, 2600);
+    }
     renderGame();
     maybeAIMove();
   }
@@ -850,6 +858,19 @@
     const g = G.data;
     const ov = $('#g-overlay');
     const participant = !!colorOf(g, S.uid);
+    if (g.status === 'active' && G.announceUntil && Date.now() < G.announceUntil) {
+      const my = colorOf(g, S.uid);
+      const opp = my === 1 ? g.white : g.black;
+      ov.innerHTML = `<div class="ov-card reveal"><div class="muted">🎲 흑백 추첨 결과</div>
+        <div style="display:flex;justify-content:center;margin:14px 0"><span class="stone ${my === 1 ? 'b' : 'w'}" style="width:64px;height:64px"></span></div>
+        <h2 style="font-size:1.8em">나는 ${my === 1 ? '흑' : '백'}</h2>
+        <div class="reason">${my === 1 ? '먼저 둡니다 · 삼삼·사사·장목 금수 주의!' : '두 번째로 둡니다 · 금수 없음'}</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:6px">상대 ${nameTag(opp)} ${my === 1 ? '⚪ 백' : '⚫ 흑'}</div></div>`;
+      ov.classList.remove('hidden');
+      ov.onclick = () => { G.announceUntil = 0; ov.onclick = null; renderGame(); };
+      return;
+    }
+    ov.onclick = null;
     if (g.status === 'waiting') {
       const r = g.ready || {};
       const meReady = r[S.uid];
