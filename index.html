@@ -39,11 +39,13 @@
       <h1>오목 아레나</h1>
       <p class="muted">렌주룰 · 클래스 랭크 리그</p>
       <form id="login-form" autocomplete="on">
+        <label>반 코드 <span style="font-size:.85em">(총관리자는 비워 두세요)</span><input id="login-class" autocapitalize="none" spellcheck="false" placeholder="예: 3-2"></label>
         <label>아이디<input id="login-id" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
         <label>비밀번호<input id="login-pw" type="password" autocomplete="current-password" required></label>
         <button class="btn primary lg" type="submit">입장하기</button>
         <p class="err" id="login-err"></p>
       </form>
+      <button class="btn ghost sm" id="to-signup" type="button" style="width:auto;margin-top:4px">선생님: 새 반 만들기</button>
       <div class="demo-note hidden" id="demo-note">
         <b>데모 모드</b> — Firebase가 연결되지 않아 이 브라우저에만 저장됩니다.
         새 탭을 열어 다른 학생으로 로그인하면 대전을 시험할 수 있어요.
@@ -65,6 +67,27 @@
         <button class="btn primary lg" type="submit">관리자 계정 만들기</button>
         <p class="err" id="setup-err"></p>
       </form>
+    </div>
+  </section>
+
+  <!-- 선생님: 새 반 만들기 -->
+  <section id="scr-signup" class="screen center hidden">
+    <div class="auth-card">
+      <div class="logo-lg"><span class="stone b"></span><span class="stone w"></span></div>
+      <h1>새 반 만들기</h1>
+      <p class="muted">총관리자에게 받은 <b>가입 코드</b>가 필요해요.</p>
+      <form id="signup-form" autocomplete="off">
+        <label>가입 코드<input name="join" required autocapitalize="none" spellcheck="false"></label>
+        <label>반 이름<input name="cname" required placeholder="예: 3학년 2반"></label>
+        <label>반 코드 <span style="font-size:.85em">(학생들이 로그인할 때 입력)</span><input name="code" required autocapitalize="none" spellcheck="false" placeholder="예: 3-2  (영문 소문자·숫자·-)"></label>
+        <label>선생님 표시 이름<input name="tname" required placeholder="예: 김선생님"></label>
+        <label>관리자 아이디<input name="tid" required value="teacher" autocapitalize="none" spellcheck="false"></label>
+        <label>비밀번호 (6자 이상)<input name="pw" type="password" minlength="6" autocomplete="new-password" required></label>
+        <label>비밀번호 확인<input name="pw2" type="password" minlength="6" autocomplete="new-password" required></label>
+        <button class="btn primary lg" type="submit">반 만들기</button>
+        <p class="err" id="signup-err"></p>
+      </form>
+      <button class="btn ghost sm" id="to-login" type="button" style="width:auto;margin-top:4px">← 로그인으로</button>
     </div>
   </section>
 
@@ -109,8 +132,10 @@
   <!-- 관리자 -->
   <section id="scr-admin" class="screen hidden">
     <header class="topbar">
-      <div class="brand"><span class="stone b sm"></span><span class="stone w sm"></span>오목 아레나 <span class="pill">관리자</span></div>
+      <div class="brand"><span class="stone b sm"></span><span class="stone w sm"></span>오목 아레나 <span class="pill" id="admin-role">관리자</span></div>
+      <div id="admin-class" class="admin-class"></div>
       <nav class="tabs" id="admin-tabs">
+        <button data-tab="classes" class="super-only hidden">🏫 반 관리</button>
         <button data-tab="live" class="on">실시간 경기</button>
         <button data-tab="match">매치 배정</button>
         <button data-tab="students">학생 관리</button>

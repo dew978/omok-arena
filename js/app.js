@@ -9,14 +9,34 @@
   const MATCH_NAMES = { random: '랜덤 매치', select: '1:1 선택 매치', assigned: '선생님 배정', ai: 'AI 대전', friend: '친구 대전' };
   const REASON_NAMES = { five: '오목 완성', foul: '흑 금수 반칙패', resign: '기권', timeout: '시간 초과', draw: '무승부', cancel: '취소' };
 
+  /* 역할
+     - isSuper : 총관리자(master). 반 목록·가입 코드 관리, 모든 반 관리 가능
+     - isMaster: 현재 반의 관리자 화면을 쓰는 사람 (반 관리자 또는 총관리자)
+     - 학생    : 자기 반(cid) 안에서만 경기 */
   const S = {
-    uid: null, isMaster: false, masterUid: null, masterName: '선생님',
+    uid: null, isSuper: false, isMaster: false, masterUid: null, masterName: '선생님',
+    cid: null, classMeta: null, classList: {}, loginKey: '',
     users: {}, presence: {}, active: {}, settingsRaw: {}, champion: null, seasons: {},
-    myGames: {}, subs: [], timers: [], screen: null, pst: 'idle',
+    myGames: {}, subs: [], classSubs: [], timers: [], screen: null, pst: 'idle',
     pref: { aiLevel: 'normal', aiColor: 'black' },
     dismissed: {}, game: null, queue: null, queueData: {}, outInvite: null, inviteModal: null, settingUp: false,
   };
   const settings = () => Object.assign({}, R.DEFAULT_SETTINGS, S.settingsRaw || {});
+
+  // 현재 반(classes/{cid}) 아래 경로로 읽고 쓰는 도우미
+  const D = {
+    p: (path) => `classes/${S.cid}` + (path ? '/' + path : ''),
+    get: (p) => B.get(D.p(p)),
+    set: (p, v) => B.set(D.p(p), v),
+    update: (p, o) => B.update(D.p(p), o),
+    remove: (p) => B.remove(D.p(p)),
+    on: (p, f) => B.on(D.p(p), f),
+    tx: (p, f) => B.tx(D.p(p), f),
+  };
+  const CODE_RE = /^[a-z0-9][a-z0-9-]{1,11}$/;
+  const ID_RE = /^[a-z0-9_]{2,20}$/;
+  // Firebase 계정 키: 총관리자는 'master', 그 외는 '반코드.아이디'
+  const accountKey = (cid, id) => (cid ? `${cid}.${id}` : id).toLowerCase();
 
   /* ───────────── 공통 UI ───────────── */
   const EMB = {
@@ -127,6 +147,7 @@
       return;
     }
     if (B.mode === 'demo') $('#demo-note').classList.remove('hidden');
+    try { $('#login-class').value = localStorage.getItem('omokClassCode') || ''; } catch (e) {}
     B.onAuth(async (uid) => {
       if (S.settingUp) return;
       endSession();
@@ -142,10 +163,73 @@
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     $('#login-err').textContent = '';
+    const code = $('#login-class').value.trim().toLowerCase();
+    const id = $('#login-id').value.trim().toLowerCase();
     const btn = e.target.querySelector('button');
     btn.disabled = true;
-    try { await B.signIn($('#login-id').value.trim(), $('#login-pw').value); }
-    catch (err) { $('#login-err').textContent = err.message; }
+    try {
+      if (code && !(await B.get(`classes/${code}/pub`))) throw new Error(`반 코드 「${code}」를 찾을 수 없습니다.`);
+      if (!code && id !== 'master') throw new Error('반 코드를 입력하세요. (총관리자만 비워 둡니다)');
+      await B.signIn(accountKey(code, id), $('#login-pw').value);
+      try { localStorage.setItem('omokClassCode', code); } catch (e2) {}
+    } catch (err) { $('#login-err').textContent = err.message; }
+    btn.disabled = false;
+  });
+  $('#to-signup').addEventListener('click', () => show('signup'));
+  $('#to-login').addEventListener('click', () => show('login'));
+
+  // 선생님: 가입 코드로 새 반 만들기
+  $('#signup-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const err = $('#signup-err');
+    err.textContent = '';
+    const joinCode = f.join.value.trim();
+    const cname = f.cname.value.trim();
+    const code = f.code.value.trim().toLowerCase();
+    const tname = f.tname.value.trim() || '선생님';
+    const id = f.tid.value.trim().toLowerCase();
+    const pw = f.pw.value, pw2 = f.pw2.value;
+    if (!CODE_RE.test(code)) { err.textContent = '반 코드는 영문 소문자·숫자·하이픈(-) 2~12자로, 첫 글자는 영문이나 숫자여야 해요.'; return; }
+    if (!ID_RE.test(id)) { err.textContent = '관리자 아이디는 영문 소문자·숫자·_ 2~20자입니다.'; return; }
+    if (pw !== pw2) { err.textContent = '비밀번호가 서로 다릅니다.'; return; }
+    const btn = f.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    try {
+      if (await B.get(`classes/${code}/pub`)) throw new Error('이미 사용 중인 반 코드입니다. 다른 코드를 정하세요.');
+      S.settingUp = true;
+      let uid, reused = false;
+      try { uid = await B.signUpSelf(accountKey(code, id), pw); }
+      catch (e3) {
+        // 삭제된 반의 관리자 계정이 남아 있는 경우: 같은 비밀번호면 재사용
+        if (!/이미 있는/.test(e3.message)) throw e3;
+        try { uid = await B.signIn(accountKey(code, id), pw); reused = true; }
+        catch (e4) { throw new Error('이 반 코드에 같은 관리자 아이디가 이미 쓰인 적이 있어요. 다른 관리자 아이디를 정하세요.'); }
+        if (await B.get('members/' + uid).catch(() => null)) { await B.signOut(); throw new Error('이미 사용 중인 관리자 계정입니다.'); }
+      }
+      try {
+        // 데모 모드는 보안 규칙이 없으므로 직접 확인 (Firebase에서는 규칙이 확인)
+        if (B.mode === 'demo') {
+          const jc = await B.get('config/joinCode');
+          if (!jc || jc !== joinCode) throw new Error('denied');
+        }
+        const now = B.now();
+        await B.set('members/' + uid, { cid: code, role: 'teacher', proof: joinCode, loginId: id, name: tname });
+        await B.set(`classes/${code}/meta`, { name: cname, owner: uid, teacherName: tname, createdAt: now });
+        await B.set(`classes/${code}/pub`, { name: cname });
+        await B.set(`classList/${code}`, { name: cname, teacherName: tname, owner: uid, createdAt: now });
+      } catch (inner) {
+        if (reused) await B.signOut().catch(() => {});
+        else await B.deleteSelf().catch(() => {});
+        throw new Error('가입 코드가 올바르지 않습니다. 총관리자에게 받은 코드를 확인하세요.');
+      }
+      S.settingUp = false;
+      try { localStorage.setItem('omokClassCode', code); } catch (e2) {}
+      await startSession(uid);
+    } catch (e2) {
+      S.settingUp = false;
+      err.textContent = e2.message;
+    }
     btn.disabled = false;
   });
   $('#demo-reset').addEventListener('click', async () => {
@@ -175,22 +259,53 @@
 
   async function startSession(uid) {
     S.uid = uid;
+    let mem = null;
     try {
       S.masterUid = await B.get('config/master');
-      S.isMaster = uid === S.masterUid;
-      if (!S.isMaster) {
-        const me = await B.get('users/' + uid);
-        if (!me) throw new Error('등록되지 않은 계정입니다. 선생님께 문의하세요.');
+      S.isSuper = uid === S.masterUid;
+      if (!S.isSuper) {
+        mem = await B.get('members/' + uid);
+        if (!mem || !mem.cid) throw new Error('등록되지 않은 계정입니다. 선생님께 문의하세요.');
+        if (mem.role !== 'teacher' && !(await B.get(`classes/${mem.cid}/users/${uid}`))) throw new Error('등록되지 않은 계정입니다. 선생님께 문의하세요.');
       }
-      S.masterName = (await B.get('config/masterName')) || '선생님';
     } catch (err) {
       await B.signOut();
       show('login');
       $('#login-err').textContent = err.message;
       return;
     }
-    const sub = (p, f) => S.subs.push(B.on(p, f));
-    sub('config/settings', (v) => { S.settingsRaw = v || {}; render(); });
+    S.isMaster = S.isSuper || mem.role === 'teacher';
+    S.loginKey = S.isSuper ? 'master' : accountKey(mem.cid, mem.loginId || '');
+    S.timers.push(setInterval(render, 20000));
+    if (S.isSuper) {
+      S.subs.push(B.on('classList', (v) => { S.classList = v || {}; render(); }));
+      let last = null;
+      try { last = localStorage.getItem('omokSuperClass'); } catch (e) {}
+      show('admin');
+      if (window.Admin) window.Admin.boot();
+      await enterClass(last && (await B.get(`classes/${last}/pub`)) ? last : null);
+      return;
+    }
+    await enterClass(mem.cid);
+    show(S.isMaster ? 'admin' : 'home');
+    if (S.isMaster && window.Admin) window.Admin.boot();
+  }
+
+  // 반 전환: 반 단위 구독을 모두 새로 연결
+  async function enterClass(cid) {
+    S.classSubs.forEach((u) => u());
+    S.classSubs = [];
+    if (window.Admin) window.Admin.leave();
+    stopQueue(true);
+    closeGame();
+    Object.assign(S, { cid, classMeta: null, users: {}, presence: {}, active: {}, settingsRaw: {}, seasons: {}, myGames: {}, champion: null, dismissed: {} });
+    if (S.isSuper) { try { localStorage.setItem('omokSuperClass', cid || ''); } catch (e) {} }
+    if (!cid) { render(); return; }
+    S.classMeta = (await B.get(`classes/${cid}/meta`)) || {};
+    if (S.cid !== cid) return;
+    S.masterName = S.classMeta.teacherName || '선생님';
+    const sub = (p, f) => S.classSubs.push(D.on(p, f));
+    sub('settings', (v) => { S.settingsRaw = v || {}; render(); });
     sub('users', (v) => {
       S.users = v || {};
       S.champion = R.championOf(S.users);
@@ -201,24 +316,25 @@
     sub('active', (v) => { S.active = v || {}; onActiveChange(); render(); });
     sub('seasons', (v) => { S.seasons = v || {}; render(); });
     if (!S.isMaster) {
-      sub('userGames/' + uid, (v) => { S.myGames = v || {}; render(); });
-      sub('invites/' + uid, (v) => onInvites(v || {}));
+      sub('userGames/' + S.uid, (v) => { S.myGames = v || {}; render(); });
+      sub('invites/' + S.uid, (v) => onInvites(v || {}));
+      // 학생만 접속 상태를 기록
+      S.pst = 'idle';
+      const pval = () => ({ ts: B.now(), st: S.pst });
+      B.setupPresence(D.p('presence/' + S.uid), pval);
+      D.set('presence/' + S.uid, pval()).catch(() => {});
+      S.timers.push(setInterval(heartbeat, 15000));
     }
-    // 접속 상태
-    S.pst = 'idle';
-    const pval = () => ({ ts: B.now(), st: S.isMaster ? 'master' : S.pst });
-    B.setupPresence(uid, pval);
-    B.set('presence/' + uid, pval()).catch(() => {});
-    S.timers.push(setInterval(() => { if (S.uid) B.set('presence/' + S.uid, pval()).catch(() => {}); }, 15000));
-    S.timers.push(setInterval(render, 20000));
-    show(S.isMaster ? 'admin' : 'home');
     if (S.isMaster && window.Admin) window.Admin.enter();
+    render();
   }
-  function heartbeat() { if (S.uid) B.set('presence/' + S.uid, { ts: B.now(), st: S.isMaster ? 'master' : S.pst }).catch(() => {}); }
+  function heartbeat() { if (S.uid && S.cid && !S.isMaster) D.set('presence/' + S.uid, { ts: B.now(), st: S.pst }).catch(() => {}); }
 
   function endSession() {
     S.subs.forEach((u) => u());
+    S.classSubs.forEach((u) => u());
     S.subs = [];
+    S.classSubs = [];
     S.timers.forEach((t) => clearInterval(t));
     S.timers = [];
     stopQueue(false);
@@ -226,16 +342,16 @@
     closeGame();
     if (window.Admin) window.Admin.leave();
     $('#modal-root').innerHTML = '';
-    Object.assign(S, { uid: null, isMaster: false, users: {}, presence: {}, active: {}, myGames: {}, dismissed: {} });
+    Object.assign(S, { uid: null, isSuper: false, isMaster: false, cid: null, classMeta: null, classList: {}, users: {}, presence: {}, active: {}, myGames: {}, dismissed: {} });
   }
   async function logout() {
     const uid = S.uid;
     stopQueue(true);
     cancelOutInvite(true);
-    if (uid) await B.remove('presence/' + uid).catch(() => {});
+    if (uid && S.cid && !S.isMaster) await D.remove('presence/' + uid).catch(() => {});
     await B.signOut();
   }
-  window.addEventListener('beforeunload', () => { if (B.mode === 'demo' && S.uid) B.remove('presence/' + S.uid); });
+  window.addEventListener('beforeunload', () => { if (B.mode === 'demo' && S.uid && S.cid && !S.isMaster) D.remove('presence/' + S.uid); });
 
   document.addEventListener('click', (e) => {
     const a = e.target.closest('[data-act="logout"]');
@@ -376,7 +492,7 @@
       ready: ready ? { [black]: true, [white]: true } : {}, moves: [], createdAt: now, turnStart: now,
       timeLimit: Number(mode === 'rank' ? st.moveTimeRank : st.moveTimeNormal) || 0, pre, by: S.uid,
     };
-    await B.update('', {
+    await D.update('', {
       ['games/' + gid]: g, ['active/' + black]: gid, ['active/' + white]: gid,
       ['live/' + gid]: { black, white, mode, matchType, createdAt: now },
     });
@@ -389,7 +505,7 @@
     const gid = B.newKey(), now = B.now();
     const black = color === 'black' ? S.uid : 'AI', white = color === 'black' ? 'AI' : S.uid;
     const g = { id: gid, mode: 'normal', matchType: 'ai', aiLevel: S.pref.aiLevel, black, white, status: 'active', ready: {}, moves: [], createdAt: now, turnStart: now, timeLimit: 0, pre: {}, by: S.uid };
-    await B.update('', { ['games/' + gid]: g, ['active/' + S.uid]: gid, ['live/' + gid]: { black, white, mode: 'normal', matchType: 'ai', aiLevel: S.pref.aiLevel, createdAt: now } });
+    await D.update('', { ['games/' + gid]: g, ['active/' + S.uid]: gid, ['live/' + gid]: { black, white, mode: 'normal', matchType: 'ai', aiLevel: S.pref.aiLevel, createdAt: now } });
   }
 
   async function startQueue() {
@@ -401,7 +517,7 @@
       if (!(await confirmBox('이번 주 점수 반영 횟수 초과', `이번 주 랭크전 ${st.weeklyLimit}경기를 모두 했어요. 계속하면 <b>점수가 반영되지 않는 연습 경기</b>로 기록돼요.`, '그래도 매칭'))) return;
     }
     const now = B.now();
-    await B.set('queue/' + S.uid, { uid: S.uid, score: me.score, since: now });
+    await D.set('queue/' + S.uid, { uid: S.uid, score: me.score, since: now });
     S.pst = 'queue';
     heartbeat();
     const m = modal(`<div class="searching"><div class="rings"><i></i><i></i><i></i><span class="stone b"></span></div>
@@ -411,7 +527,7 @@
       { dismissable: false, onClose: () => stopQueue(true) });
     S.queue = {
       since: now, modal: m,
-      unsub: B.on('queue', (q) => { S.queueData = q || {}; tryMatch(); }),
+      unsub: D.on('queue', (q) => { S.queueData = q || {}; tryMatch(); }),
       timer: setInterval(() => {
         const s = Math.floor((B.now() - now) / 1000);
         const el = $('#q-time');
@@ -428,7 +544,7 @@
     q.unsub && q.unsub();
     clearInterval(q.timer);
     q.modal && q.modal.close();
-    if (removeEntry && S.uid) B.remove('queue/' + S.uid).catch(() => {});
+    if (removeEntry && S.uid) D.remove('queue/' + S.uid).catch(() => {});
     if (S.pst === 'queue') { S.pst = 'idle'; heartbeat(); }
   }
   let matching = false;
@@ -441,7 +557,7 @@
     const now = B.now();
     if (mine.match) {
       // 매칭 후 경기가 만들어지지 않으면 다시 대기
-      if (now - (mine.matchAt || 0) > 12000) B.tx('queue/' + S.uid, (c) => (c && c.match ? Object.assign(c, { match: null, matchAt: null }) : undefined));
+      if (now - (mine.matchAt || 0) > 12000) D.tx('queue/' + S.uid, (c) => (c && c.match ? Object.assign(c, { match: null, matchAt: null }) : undefined));
       return;
     }
     const waited = now - mine.since;
@@ -460,7 +576,7 @@
     matching = true;
     try {
       const gid = B.newKey();
-      const r = await B.tx('queue', (qq) => {
+      const r = await D.tx('queue', (qq) => {
         if (!qq || !qq[S.uid] || !qq[best.u] || qq[S.uid].match || qq[best.u].match) return undefined;
         qq[S.uid].match = gid; qq[best.u].match = gid;
         qq[S.uid].matchAt = qq[best.u].matchAt = B.now();
@@ -468,7 +584,7 @@
       });
       if (r.committed) {
         await createPvp(S.uid, best.u, 'rank', 'random', true, gid);
-        await B.update('', { ['queue/' + S.uid]: null, ['queue/' + best.u]: null });
+        await D.update('', { ['queue/' + S.uid]: null, ['queue/' + best.u]: null });
       }
     } catch (e) { console.warn(e); }
     matching = false;
@@ -496,7 +612,7 @@
   async function sendInvite(to, kind) {
     if (S.active[S.uid]) return toast('이미 참여 중인 경기가 있어요.');
     const path = `invites/${to}/${S.uid}`;
-    await B.set(path, { from: S.uid, kind, ts: B.now() });
+    await D.set(path, { from: S.uid, kind, ts: B.now() });
     const m = modal(`<div class="searching"><div class="rings"><i></i><i></i><i></i><span class="stone w"></span></div>
       <h3>${esc(nameOf(to))}님에게 대결 신청 중…</h3><p class="muted">${kind === 'rank' ? '랭크전 1:1 선택 매치' : '일반전 친구 대전'} · 상대가 수락하면 바로 시작해요.</p>
       <div class="foot" style="justify-content:center"><button class="btn ghost" data-close>신청 취소</button></div></div>`,
@@ -504,7 +620,7 @@
     let seen = false;
     S.outInvite = {
       path, modal: m,
-      unsub: B.on(path, (v) => {
+      unsub: D.on(path, (v) => {
         if (v) { seen = true; return; }
         if (!seen) return;
         const had = S.outInvite;
@@ -521,7 +637,7 @@
     o.unsub && o.unsub();
     clearTimeout(o.timer);
     o.modal && o.modal.close();
-    if (remove) B.remove(o.path).catch(() => {});
+    if (remove) D.remove(o.path).catch(() => {});
   }
 
   function onInvites(v) {
@@ -536,15 +652,15 @@
       <div class="foot"><button class="btn ghost" data-no>거절</button><button class="btn primary lg" data-yes>수락하고 시작</button></div>`,
       { dismissable: false, onClose: () => { S.inviteModal = null; } });
     S.inviteModal = { from, m };
-    m.el.querySelector('[data-no]').onclick = () => { m.close(); B.remove(`invites/${S.uid}/${from}`); };
+    m.el.querySelector('[data-no]').onclick = () => { m.close(); D.remove(`invites/${S.uid}/${from}`); };
     m.el.querySelector('[data-yes]').onclick = async () => {
       m.close();
-      if (S.active[S.uid]) { toast('이미 참여 중인 경기가 있어요.'); return B.remove(`invites/${S.uid}/${from}`); }
-      if (S.active[from]) { toast('상대가 이미 다른 경기 중이에요.'); return B.remove(`invites/${S.uid}/${from}`); }
+      if (S.active[S.uid]) { toast('이미 참여 중인 경기가 있어요.'); return D.remove(`invites/${S.uid}/${from}`); }
+      if (S.active[from]) { toast('상대가 이미 다른 경기 중이에요.'); return D.remove(`invites/${S.uid}/${from}`); }
       stopQueue(true);
       const rank = inv.kind === 'rank';
       await createPvp(from, S.uid, rank ? 'rank' : 'normal', rank ? 'select' : 'friend', true);
-      await B.remove(`invites/${S.uid}/${from}`);
+      await D.remove(`invites/${S.uid}/${from}`);
     };
   }
 
@@ -566,7 +682,7 @@
   }
 
   async function playMove(gid, idx, asUid) {
-    return B.tx('games/' + gid, (g) => {
+    return D.tx('games/' + gid, (g) => {
       if (!g || g.status !== 'active') return undefined;
       const moves = g.moves || [];
       const color = turnColor(moves);
@@ -595,7 +711,7 @@
     if (!boardView) boardView = new BoardView($('#g-board'), { interactive: true, labels: true, onTap: onBoardTap });
     boardView.set({ moves: [], win: [], forbidden: [], ghost: -1 });
     $('#g-num').classList.remove('on');
-    S.game.unsub = B.on('games/' + gid, (g) => {
+    S.game.unsub = D.on('games/' + gid, (g) => {
       if (!S.game || S.game.gid !== gid) return;
       S.game.data = g;
       onGameData();
@@ -627,7 +743,7 @@
     if (!G.spectate && g && g.status === 'active') {
       if (g.matchType === 'ai') {
         if (!(await confirmBox('AI 대전 나가기', '진행 중인 AI 대전을 끝내고 나갈까요? (일반전이라 점수 변동은 없어요)', '나가기'))) return;
-        await B.tx('games/' + g.id, (x) => (x && x.status === 'active' ? Object.assign(x, { status: 'cancelled', result: { reason: 'cancel', moves: (x.moves || []).length } }) : undefined));
+        await D.tx('games/' + g.id, (x) => (x && x.status === 'active' ? Object.assign(x, { status: 'cancelled', result: { reason: 'cancel', moves: (x.moves || []).length } }) : undefined));
         finalize(g.id);
       } else if (!(await confirmBox('경기에서 나가기', '경기 중에 나가면 제한 시간이 지나 <b>시간 초과 패배</b>가 될 수 있어요. 홈 화면의 「경기로 가기」로 다시 들어올 수 있어요.', '나가기'))) return;
     }
@@ -667,7 +783,7 @@
     const G = S.game;
     if (!G || !G.data) return;
     if (!(await confirmBox('기권', '정말 기권할까요? 기권하면 패배로 처리돼요.', '기권하기', true))) return;
-    await B.tx('games/' + G.gid, (g) => {
+    await D.tx('games/' + G.gid, (g) => {
       if (!g || g.status !== 'active') return undefined;
       const my = colorOf(g, S.uid);
       if (!my) return undefined;
@@ -684,7 +800,7 @@
     if (g.status === 'waiting' && participant) {
       const ready = g.ready || {};
       if (ready[g.black] && ready[g.white]) {
-        B.tx('games/' + g.id, (x) => {
+        D.tx('games/' + g.id, (x) => {
           if (!x || x.status !== 'waiting') return undefined;
           const r = x.ready || {};
           if (!r[x.black] || !r[x.white]) return undefined;
@@ -750,7 +866,7 @@
     // 시간 초과 판정 (참가자 또는 관리자 누구든 처리)
     if (g.status === 'active' && g.timeLimit > 0 && now - g.turnStart > g.timeLimit * 1000 + 1500 && !G.claiming && (colorOf(g, S.uid) || S.isMaster)) {
       G.claiming = true;
-      B.tx('games/' + g.id, (x) => {
+      D.tx('games/' + g.id, (x) => {
         if (!x || x.status !== 'active' || !(B.now() - x.turnStart > x.timeLimit * 1000 + 1500)) return undefined;
         const c = turnColor(x.moves);
         finishGame(x, uidOfColor(x, 3 - c), 'timeout');
@@ -849,7 +965,7 @@
   });
 
   async function cancelGame(gid) {
-    await B.tx('games/' + gid, (x) => (x && (x.status === 'active' || x.status === 'waiting') ? Object.assign(x, { status: 'cancelled', result: { reason: 'cancel', moves: (x.moves || []).length } }) : undefined));
+    await D.tx('games/' + gid, (x) => (x && (x.status === 'active' || x.status === 'waiting') ? Object.assign(x, { status: 'cancelled', result: { reason: 'cancel', moves: (x.moves || []).length } }) : undefined));
     await finalize(gid);
   }
 
@@ -883,7 +999,7 @@
         ${participant && !meReady ? '<button class="btn primary lg" data-ov="ready">준비 완료!</button>' : participant ? '<p class="muted">상대가 준비하면 바로 시작해요.</p>' : ''}
       </div>`;
       ov.classList.remove('hidden');
-      ov.querySelector('[data-ov="ready"]')?.addEventListener('click', () => B.set(`games/${g.id}/ready/${S.uid}`, true));
+      ov.querySelector('[data-ov="ready"]')?.addEventListener('click', () => D.set(`games/${g.id}/ready/${S.uid}`, true));
       return;
     }
     if (!(g.status === 'finished' || g.status === 'cancelled') || G.hideOverlay) { ov.classList.add('hidden'); return; }
@@ -958,13 +1074,13 @@
     if (finalizing.has(gid)) return;
     finalizing.add(gid);
     try {
-      const r = await B.tx(`games/${gid}/scored`, (cur) => (cur ? undefined : true));
+      const r = await D.tx(`games/${gid}/scored`, (cur) => (cur ? undefined : true));
       if (!r.committed) return;
-      const g = await B.get('games/' + gid);
+      const g = await D.get('games/' + gid);
       if (!g) return;
       const humans = [g.black, g.white].filter((u) => u && u !== 'AI');
-      for (const u of humans) await B.tx('active/' + u, (cur) => (cur === gid ? null : undefined));
-      await B.remove('live/' + gid);
+      for (const u of humans) await D.tx('active/' + u, (cur) => (cur === gid ? null : undefined));
+      await D.remove('live/' + gid);
       if (g.status === 'cancelled') return;
       const now = B.now();
       const res = g.result || {};
@@ -972,12 +1088,12 @@
       const upd = {};
       let info = null;
       if (g.mode === 'rank' && humans.length === 2) {
-        const users = { [g.black]: await B.get('users/' + g.black), [g.white]: await B.get('users/' + g.white) };
+        const users = { [g.black]: await D.get('users/' + g.black), [g.white]: await D.get('users/' + g.white) };
         if (users[g.black] && users[g.white]) {
           info = R.computeRank(g, users, settings(), now);
           for (const u of humans) {
             const opp = u === g.black ? g.white : g.black;
-            const t = await B.tx('users/' + u, (cur) => (cur ? R.applyToUser(cur, info[u], winner === u, !winner, opp, now) : undefined));
+            const t = await D.tx('users/' + u, (cur) => (cur ? R.applyToUser(cur, info[u], winner === u, !winner, opp, now) : undefined));
             const nu = t.value || {};
             info[u].pre = { score: users[u].score, placed: users[u].placed || 0 };
             info[u].post = { score: nu.score, placed: nu.placed || 0 };
@@ -986,7 +1102,7 @@
         }
       } else {
         for (const u of humans) {
-          await B.tx('users/' + u, (cur) => {
+          await D.tx('users/' + u, (cur) => {
             if (!cur) return undefined;
             cur.nGames = (cur.nGames || 0) + 1;
             if (winner === u) cur.nWins = (cur.nWins || 0) + 1;
@@ -1010,7 +1126,7 @@
         for (const u of humans) log.deltas[u] = { delta: info[u].delta, counted: info[u].counted, placement: info[u].placement, post: info[u].post.score };
       }
       upd['log/' + gid] = log;
-      await B.update('', upd);
+      await D.update('', upd);
     } catch (e) {
       console.error('finalize', e);
     } finally {
@@ -1019,7 +1135,7 @@
   }
 
   window.App = {
-    S, B, R, J, $, $$, esc, emblem, nameTag, nameOf, scoreText, status, statusDot, STATUS_KO, isOnline, toast, modal, confirmBox,
+    S, B, D, R, J, $, $$, esc, enterClass, accountKey, CODE_RE, ID_RE, emblem, nameTag, nameOf, scoreText, status, statusDot, STATUS_KO, isOnline, toast, modal, confirmBox,
     settings, fmtTime, render, show, openGame, createPvp, cancelGame, finalize, rankingOrder, tierOfUid, logout,
     AI_NAMES, MATCH_NAMES, REASON_NAMES,
   };

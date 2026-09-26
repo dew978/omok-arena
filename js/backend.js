@@ -138,6 +138,12 @@
         delete a[String(loginId).toLowerCase()];
         saveAuth(a);
       },
+      async deleteSelf() {
+        const a = loadAuth();
+        for (const k of Object.keys(a)) if (a[k].uid === uid) delete a[k];
+        saveAuth(a);
+        await api.signOut();
+      },
       setupPresence() {},
       resetDemo() { localStorage.removeItem(KEY); localStorage.removeItem(AUTH_KEY); sessionStorage.removeItem(SESSION_KEY); },
     };
@@ -231,12 +237,19 @@
           await c.user.delete();
         } catch (e) { throw koErr(e); }
       },
-      setupPresence(uid, getVal) {
-        const ref = db.ref('presence/' + uid);
-        db.ref('.info/connected').on('value', (s) => {
+      async deleteSelf() {
+        try { if (auth.currentUser) await auth.currentUser.delete(); } catch (e) { await auth.signOut(); }
+      },
+      // path: 접속 상태를 기록할 경로 (연결이 끊기면 자동 삭제)
+      setupPresence(path, getVal) {
+        const ref = db.ref(path);
+        if (this._presenceOff) this._presenceOff();
+        const conn = db.ref('.info/connected');
+        const h = conn.on('value', (s) => {
           if (s.val() !== true) return;
           ref.onDisconnect().remove().then(() => ref.set(getVal()));
         });
+        this._presenceOff = () => { conn.off('value', h); ref.onDisconnect().cancel(); };
       },
     };
     return api;

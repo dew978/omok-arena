@@ -9,61 +9,139 @@
         ".read": true,
         ".write": "auth != null && root.child('config/master').val() === auth.uid"
       },
-      "settings": {
-        ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      "joinCode": {
+        ".read": "auth != null && root.child('config/master').val() === auth.uid",
         ".write": "auth != null && root.child('config/master').val() === auth.uid"
+      },
+      "settings": {
+        ".read": "auth != null && root.child('config/master').val() === auth.uid",
+        ".write": "auth != null && root.child('config/master').val() === auth.uid"
+      }
+    },
+    "members": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('config/master').val() === auth.uid || (root.child('members/' + auth.uid + '/role').val() === 'teacher' && root.child('members/' + auth.uid + '/cid').val() === data.child('cid').val()))",
+        ".write": "auth != null && (root.child('config/master').val() === auth.uid || ($uid === auth.uid && !data.exists() && newData.child('role').val() === 'teacher' && root.child('config/joinCode').exists() && newData.child('proof').val() === root.child('config/joinCode').val() && !root.child('classes/' + newData.child('cid').val() + '/meta').exists()) || (root.child('members/' + auth.uid + '/role').val() === 'teacher' && $uid !== auth.uid && ((!data.exists() && newData.child('role').val() === 'student' && newData.child('cid').val() === root.child('members/' + auth.uid + '/cid').val()) || (data.exists() && !newData.exists() && data.child('role').val() === 'student' && data.child('cid').val() === root.child('members/' + auth.uid + '/cid').val()))))"
+      }
+    },
+    "classList": {
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
+      "$cid": {
+        ".write": "auth != null && ((root.child('members/' + auth.uid + '/cid').val() === $cid && root.child('members/' + auth.uid + '/role').val() === 'teacher') || root.child('config/master').val() === auth.uid)"
+      }
+    },
+    "classes": {
+      "$cid": {
+        ".write": "auth != null && root.child('config/master').val() === auth.uid",
+        "pub": {
+          ".read": true,
+          ".write": "auth != null && ((root.child('members/' + auth.uid + '/cid').val() === $cid && root.child('members/' + auth.uid + '/role').val() === 'teacher') || root.child('config/master').val() === auth.uid)"
+        },
+        "meta": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          ".write": "auth != null && ((root.child('members/' + auth.uid + '/cid').val() === $cid && root.child('members/' + auth.uid + '/role').val() === 'teacher') || root.child('config/master').val() === auth.uid)"
+        },
+        "settings": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          ".write": "auth != null && ((root.child('members/' + auth.uid + '/cid').val() === $cid && root.child('members/' + auth.uid + '/role').val() === 'teacher') || root.child('config/master').val() === auth.uid)"
+        },
+        "users": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          "$uid": {
+            ".write": "(auth != null && ((root.child('members/' + auth.uid + '/cid').val() === $cid && root.child('members/' + auth.uid + '/role').val() === 'teacher') || root.child('config/master').val() === auth.uid)) || ((auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)) && data.exists() && newData.exists())"
+          }
+        },
+        "secrets": {
+          ".read": "auth != null && ((root.child('members/' + auth.uid + '/cid').val() === $cid && root.child('members/' + auth.uid + '/role').val() === 'teacher') || root.child('config/master').val() === auth.uid)",
+          "$uid": {
+            ".read": "(auth != null && ((root.child('members/' + auth.uid + '/cid').val() === $cid && root.child('members/' + auth.uid + '/role').val() === 'teacher') || root.child('config/master').val() === auth.uid)) || (auth != null && auth.uid === $uid)",
+            ".write": "auth != null && ((root.child('members/' + auth.uid + '/cid').val() === $cid && root.child('members/' + auth.uid + '/role').val() === 'teacher') || root.child('config/master').val() === auth.uid)"
+          }
+        },
+        "presence": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          "$uid": {
+            ".write": "(auth != null && auth.uid === $uid && root.child('members/' + auth.uid + '/cid').val() === $cid) || (auth != null && ((root.child('members/' + auth.uid + '/cid').val() === $cid && root.child('members/' + auth.uid + '/role').val() === 'teacher') || root.child('config/master').val() === auth.uid))"
+          }
+        },
+        "queue": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          ".write": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)"
+        },
+        "invites": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          ".write": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)"
+        },
+        "active": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          ".write": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)"
+        },
+        "live": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          ".write": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)"
+        },
+        "userGames": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          ".write": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)"
+        },
+        "log": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          ".write": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)"
+        },
+        "games": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          "$gid": {
+            ".write": "(auth != null && ((root.child('members/' + auth.uid + '/cid').val() === $cid && root.child('members/' + auth.uid + '/role').val() === 'teacher') || root.child('config/master').val() === auth.uid)) || ((auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)) && (data.child('black').val() === auth.uid || data.child('white').val() === auth.uid || newData.child('black').val() === auth.uid || newData.child('white').val() === auth.uid))"
+          }
+        },
+        "seasons": {
+          ".read": "auth != null && (root.child('members/' + auth.uid + '/cid').val() === $cid || root.child('config/master').val() === auth.uid)",
+          ".write": "auth != null && ((root.child('members/' + auth.uid + '/cid').val() === $cid && root.child('members/' + auth.uid + '/role').val() === 'teacher') || root.child('config/master').val() === auth.uid)"
+        }
       }
     },
     "users": {
-      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
-      "$uid": {
-        ".write": "auth != null && (root.child('config/master').val() === auth.uid || (root.child('users/' + auth.uid).exists() && data.exists() && newData.exists()))"
-      }
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
+      ".write": "auth != null && root.child('config/master').val() === auth.uid"
     },
     "secrets": {
-      "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || root.child('config/master').val() === auth.uid)",
-        ".write": "auth != null && root.child('config/master').val() === auth.uid"
-      }
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
+      ".write": "auth != null && root.child('config/master').val() === auth.uid"
     },
     "presence": {
-      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
-      "$uid": {
-        ".write": "auth != null && (auth.uid === $uid || root.child('config/master').val() === auth.uid)"
-      }
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
+      ".write": "auth != null && root.child('config/master').val() === auth.uid"
     },
     "queue": {
-      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
-      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
+      ".write": "auth != null && root.child('config/master').val() === auth.uid"
     },
     "invites": {
-      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
-      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
+      ".write": "auth != null && root.child('config/master').val() === auth.uid"
     },
     "active": {
-      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
-      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
+      ".write": "auth != null && root.child('config/master').val() === auth.uid"
     },
     "games": {
-      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
-      "$gid": {
-        ".write": "auth != null && (root.child('config/master').val() === auth.uid || (root.child('users/' + auth.uid).exists() && (data.child('black').val() === auth.uid || data.child('white').val() === auth.uid || newData.child('black').val() === auth.uid || newData.child('white').val() === auth.uid)))"
-      }
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
+      ".write": "auth != null && root.child('config/master').val() === auth.uid"
     },
     "live": {
-      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
-      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
+      ".write": "auth != null && root.child('config/master').val() === auth.uid"
     },
     "userGames": {
-      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
-      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
+      ".write": "auth != null && root.child('config/master').val() === auth.uid"
     },
     "log": {
-      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
-      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
+      ".write": "auth != null && root.child('config/master').val() === auth.uid"
     },
     "seasons": {
-      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      ".read": "auth != null && root.child('config/master').val() === auth.uid",
       ".write": "auth != null && root.child('config/master').val() === auth.uid"
     }
   }

@@ -1,7 +1,7 @@
 /* 관리자(master) 화면: 실시간 경기, 매치 배정, 학생 관리, 순위표, 경기 기록, 설정 */
 (function () {
   const A = window.App;
-  const { S, B, R, $, esc, nameTag, nameOf, emblem, toast, modal, confirmBox, status, statusDot, STATUS_KO } = A;
+  const { S, B, D, R, $, esc, nameTag, nameOf, emblem, toast, modal, confirmBox, status, statusDot, STATUS_KO } = A;
   const MAX_STUDENTS = 25;
   let tab = 'live';
   let subs = [];
@@ -9,30 +9,54 @@
   const minis = new Map();
   const sel = new Set();
   let preview = null; // {pairs, leftover, mode}
+  let classBarKey = '';
+  const counts = {}; // 반별 학생 수 (총관리자 화면)
 
   const main = () => $('#admin-main');
+  const setTab = (t) => {
+    tab = t;
+    $$('#admin-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+  };
 
   const Admin = {
-    enter() {
-      tab = 'live';
-      $$('#admin-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+    // 로그인 직후 한 번
+    boot() {
+      $$('.super-only').forEach((b) => b.classList.toggle('hidden', !S.isSuper));
+      $('#admin-role').textContent = S.isSuper ? '총관리자' : '반 관리자';
+      classBarKey = '';
+      setTab(S.isSuper && !S.cid ? 'classes' : 'live');
       main().dataset.tab = '';
-      subs.push(B.on('live', (v) => { live = v || {}; A.render(); }));
-      subs.push(B.on('log', (v) => { log = v || {}; if (tab === 'log') A.render(); }));
-      subs.push(B.on('secrets', (v) => { secrets = v || {}; if (tab === 'students') A.render(); }));
-      subs.push(B.on('queue', (v) => { queue = v || {}; }));
+      A.render();
+    },
+    // 반에 들어갈 때마다
+    enter() {
+      live = {}; log = {}; secrets = {}; queue = {};
+      sel.clear();
+      preview = null;
+      if (tab === 'classes' && !S.isSuper) setTab('live');
+      main().dataset.tab = '';
+      subs.push(D.on('live', (v) => { live = v || {}; A.render(); }));
+      subs.push(D.on('log', (v) => { log = v || {}; if (tab === 'log') A.render(); }));
+      subs.push(D.on('secrets', (v) => { secrets = v || {}; if (tab === 'students') A.render(); }));
+      subs.push(D.on('queue', (v) => { queue = v || {}; }));
     },
     leave() {
       subs.forEach((u) => u());
       subs = [];
+      live = {};
       clearMinis();
       main().dataset.tab = '';
       main().innerHTML = '';
     },
     render() {
+      renderClassBar();
       const n = Object.keys(live).length;
       const lb = $('#admin-tabs [data-tab="live"]');
       lb.innerHTML = `실시간 경기${n ? `<span class="cnt">${n}</span>` : ''}`;
+      // 반을 고르기 전에는 반 관리 탭만 사용
+      $$('#admin-tabs button').forEach((b) => { if (b.dataset.tab !== 'classes') b.disabled = !S.cid; });
+      if (!S.cid && tab !== 'classes') setTab(S.isSuper ? 'classes' : 'live');
+      if (!S.cid && tab !== 'classes') { main().innerHTML = '<p class="empty">반 정보를 불러오는 중…</p>'; main().dataset.tab = ''; return; }
       if (main().dataset.tab !== tab) {
         clearMinis();
         main().dataset.tab = tab;
@@ -46,11 +70,131 @@
 
   $('#admin-tabs').addEventListener('click', (e) => {
     const b = e.target.closest('[data-tab]');
-    if (!b) return;
-    tab = b.dataset.tab;
-    $$('#admin-tabs button').forEach((x) => x.classList.toggle('on', x === b));
+    if (!b || b.disabled) return;
+    setTab(b.dataset.tab);
     A.render();
   });
+
+  // 상단: 현재 반 표시 (총관리자는 반 선택)
+  function renderClassBar() {
+    const el = $('#admin-class');
+    const list = S.classList || {};
+    const key = JSON.stringify([S.isSuper, S.cid, S.classMeta && S.classMeta.name, Object.entries(list).map(([k, v]) => k + v.name)]);
+    if (key === classBarKey) return;
+    classBarKey = key;
+    const meta = S.classMeta || {};
+    if (S.isSuper) {
+      const opts = Object.entries(list).sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([cid, c]) => `<option value="${esc(cid)}" ${cid === S.cid ? 'selected' : ''}>${esc(c.name)} (${esc(cid)})</option>`).join('');
+      el.innerHTML = `<select id="cls-sel"><option value="">— 반 선택 —</option>${opts}</select>`;
+      $('#cls-sel').onchange = (e) => { setTab(e.target.value ? 'live' : 'classes'); A.enterClass(e.target.value || null); };
+    } else {
+      el.innerHTML = S.cid ? `<span class="cls">${esc(meta.name || '')}</span><span class="code" title="학생 로그인 시 입력하는 반 코드">반 코드 ${esc(S.cid)}</span>` : '';
+    }
+  }
+
+  /* ───────────── 반 관리 (총관리자) ───────────── */
+  const SKELETON = {}, RENDER = {};
+  SKELETON.classes = () => {
+    main().innerHTML = `<div class="a-head"><h2>반 관리</h2><span class="muted" id="cl-cnt"></span></div>
+      <div class="two-col">
+        <div class="tbl-wrap" id="cl-table"></div>
+        <div class="col" style="gap:18px">
+          <div class="panel"><h3>가입 코드</h3>
+            <p class="muted" style="margin-top:0;font-size:.88em;line-height:1.55">선생님이 로그인 화면의 <b>「선생님: 새 반 만들기」</b>에서 이 코드를 입력하면 새 반과 반 관리자 계정이 만들어져요.
+            코드를 바꾸면 이전 코드로는 더 이상 가입할 수 없어요. (이미 만든 반은 그대로)</p>
+            <label>가입 코드<input id="jc" autocapitalize="none" spellcheck="false" placeholder="아직 정하지 않음 — 정하기 전에는 아무도 반을 만들 수 없어요"></label>
+            <div class="foot"><button class="btn ghost" id="jc-gen">무작위 생성</button><button class="btn primary" id="jc-save">저장</button></div></div>
+          <div class="panel"><h3>동시 사용 한도</h3>
+            <p class="muted" style="margin:0;font-size:.88em;line-height:1.55">Firebase 무료 요금제는 <b>동시 접속 100명</b>까지예요. 25명 반이면 <b>4개 반까지 동시에</b> 수업할 수 있어요.
+            수업 시간이 겹치는 반이 더 많아지면 Firebase를 종량제(Blaze)로 바꿔야 해요.</p></div>
+          <div class="panel hidden" id="legacy"><h3>이전 버전 데이터</h3>
+            <p class="muted" style="margin-top:0;font-size:.88em;line-height:1.55" id="legacy-info"></p>
+            <div class="foot"><button class="btn danger" id="legacy-go">이전 데이터 정리</button></div></div>
+        </div>
+      </div>`;
+    B.get('config/joinCode').then((v) => { if ($('#jc')) $('#jc').value = v || ''; }).catch(() => {});
+    $('#jc-gen').onclick = () => {
+      const a = 'abcdefghjkmnpqrstuvwxyz23456789';
+      $('#jc').value = Array.from(crypto.getRandomValues(new Uint32Array(8)), (n) => a[n % a.length]).join('');
+    };
+    $('#jc-save').onclick = async () => {
+      const v = $('#jc').value.trim();
+      if (v.length < 4) return toast('가입 코드는 4자 이상으로 정하세요.', 'bad');
+      await B.set('config/joinCode', v);
+      toast('가입 코드를 저장했어요. 새 반을 만들 선생님에게 알려 주세요.', 'good');
+    };
+    $('#cl-table').addEventListener('click', onClassAction);
+    // 이전 버전(반 구분 없던 시절) 데이터가 남아 있는지 확인
+    B.get('users').then((u) => {
+      const n = Object.keys(u || {}).length;
+      if (!$('#legacy')) return;
+      $('#legacy').classList.toggle('hidden', !n);
+      $('#legacy-info').innerHTML = `반 기능이 생기기 전에 만든 학생 <b>${n}명</b>과 그 경기 기록이 남아 있어요. 새 구조에서는 쓰이지 않아요.<br>정리하면 이 학생 계정과 기록이 <b>영구 삭제</b>돼요. (총관리자 계정은 유지)`;
+    }).catch(() => {});
+    $('#legacy-go').onclick = cleanupLegacy;
+    refreshCounts();
+  };
+  const counting = new Set();
+  // 반별 학생 수: 탭을 열 때 전부, 이후에는 20초 지난 것만 다시 셈
+  function refreshCounts(onlyStale) {
+    const now = Date.now();
+    for (const cid of Object.keys(S.classList || {})) {
+      if (counting.has(cid) || (onlyStale && counts[cid] && now - counts[cid].at < 20000)) continue;
+      counting.add(cid);
+      B.get(`classes/${cid}/users`).finally(() => counting.delete(cid))
+        .then((u) => { counts[cid] = { n: Object.keys(u || {}).length, at: Date.now() }; }, () => { counts[cid] = { n: '?', at: Date.now() }; })
+        .then(() => { if (tab === 'classes' && $('#cl-table')) RENDER.classes(); });
+    }
+  }
+  RENDER.classes = () => {
+    const list = Object.entries(S.classList || {}).sort((a, b) => a[0].localeCompare(b[0]));
+    refreshCounts(true);
+    $('#cl-cnt').textContent = `${list.length}개 반`;
+    $('#cl-table').innerHTML = list.length ? `<table class="tbl"><thead><tr><th>반 코드</th><th>반 이름</th><th>담당 선생님</th><th class="num">학생</th><th>만든 날</th><th></th></tr></thead><tbody>
+      ${list.map(([cid, c]) => `<tr${cid === S.cid ? ' style="background:rgba(79,140,255,.08)"' : ''}><td><span class="code-big">${esc(cid)}</span></td><td><b>${esc(c.name)}</b></td><td>${esc(c.teacherName || '')}</td>
+        <td class="num">${counts[cid] ? counts[cid].n : '…'} / ${MAX_STUDENTS}</td><td>${c.createdAt ? A.fmtTime(c.createdAt) : ''}</td>
+        <td><div class="row-actions"><button class="btn xs primary" data-c="open" data-cid="${esc(cid)}">관리하기</button><button class="btn xs danger" data-c="del" data-cid="${esc(cid)}">반 삭제</button></div></td></tr>`).join('')}
+      </tbody></table>` : `<p class="empty" style="padding:30px;line-height:1.7">아직 만들어진 반이 없어요.<br>오른쪽에서 <b>가입 코드</b>를 정해 선생님에게 알려 주세요.</p>`;
+  };
+  async function onClassAction(e) {
+    const b = e.target.closest('[data-c]');
+    if (!b) return;
+    const cid = b.dataset.cid;
+    const c = (S.classList || {})[cid] || {};
+    if (b.dataset.c === 'open') { setTab('live'); await A.enterClass(cid); return; }
+    if (!(await confirmBox('반 삭제', `<b>${esc(c.name)}</b> (반 코드 ${esc(cid)})을 삭제할까요?<br>이 반의 <b>학생 계정·점수·경기 기록이 모두 영구 삭제</b>되고 되돌릴 수 없어요.`, '반 삭제', true))) return;
+    try {
+      const users = (await B.get(`classes/${cid}/users`)) || {};
+      const secs = (await B.get(`classes/${cid}/secrets`)) || {};
+      const meta = (await B.get(`classes/${cid}/meta`)) || {};
+      for (const [uid, u] of Object.entries(users)) {
+        try { await B.deleteAccount(A.accountKey(cid, u.loginId), secs[uid] && secs[uid].pw); } catch (err) { console.warn('계정 삭제 실패', uid, err); }
+      }
+      const upd = { [`classes/${cid}`]: null, [`classList/${cid}`]: null };
+      for (const uid of Object.keys(users)) upd['members/' + uid] = null;
+      if (meta.owner) upd['members/' + meta.owner] = null;
+      await B.update('', upd);
+      delete counts[cid];
+      if (S.cid === cid) await A.enterClass(null);
+      toast('반을 삭제했어요.', 'good');
+    } catch (err) { toast(err.message, 'bad'); }
+  }
+  async function cleanupLegacy() {
+    if (!(await confirmBox('이전 데이터 정리', '반 기능 이전에 만든 학생 계정과 경기 기록을 <b>영구 삭제</b>할까요? 되돌릴 수 없어요.', '정리하기', true))) return;
+    try {
+      const users = (await B.get('users')) || {};
+      const secs = (await B.get('secrets')) || {};
+      for (const [uid, u] of Object.entries(users)) {
+        try { await B.deleteAccount(u.loginId, secs[uid] && secs[uid].pw); } catch (err) { console.warn('계정 삭제 실패', uid, err); }
+      }
+      const upd = {};
+      for (const k of ['users', 'secrets', 'presence', 'queue', 'invites', 'active', 'games', 'live', 'userGames', 'log', 'seasons', 'config/settings']) upd[k] = null;
+      await B.update('', upd);
+      $('#legacy').classList.add('hidden');
+      toast('이전 데이터를 정리했어요.', 'good');
+    } catch (err) { toast(err.message, 'bad'); }
+  }
 
   function clearMinis() {
     for (const m of minis.values()) { m.unsub(); m.view.destroy(); }
@@ -58,7 +202,6 @@
   }
 
   /* ───────────── 실시간 경기 ───────────── */
-  const SKELETON = {}, RENDER = {};
   SKELETON.live = () => {
     main().innerHTML = `<div class="a-head"><h2>실시간 경기</h2><span class="muted" id="live-sum"></span><span class="sp"></span>
       <span class="muted" style="font-size:.9em">카드를 누르면 큰 화면으로 볼 수 있어요</span></div>
@@ -78,7 +221,7 @@
         const card = grid.querySelector(`[data-gid="${gid}"]`);
         const view = new BoardView(card.querySelector('canvas'), { mini: true });
         const m = { view, data: null, card };
-        m.unsub = B.on('games/' + gid, (g) => { m.data = g; paintMini(m); });
+        m.unsub = D.on('games/' + gid, (g) => { m.data = g; paintMini(m); });
         minis.set(gid, m);
       }
     }
@@ -211,7 +354,7 @@
     let n = 0;
     for (const [a, b] of pairs) {
       if (S.active[a] || S.active[b]) { toast(`${nameOf(a)} 또는 ${nameOf(b)}은(는) 이미 경기 중이라 건너뛰었어요.`, 'bad'); continue; }
-      await B.update('', { ['queue/' + a]: null, ['queue/' + b]: null });
+      await D.update('', { ['queue/' + a]: null, ['queue/' + b]: null });
       await A.createPvp(a, b, mode, 'assigned', false);
       n++;
     }
@@ -221,7 +364,8 @@
   /* ───────────── 학생 관리 ───────────── */
   const genPw = () => String(Math.floor(100000 + Math.random() * 900000));
   SKELETON.students = () => {
-    main().innerHTML = `<div class="a-head"><h2>학생 관리</h2><span class="muted" id="s-cnt"></span></div>
+    main().innerHTML = `<div class="a-head"><h2>학생 관리</h2><span class="muted" id="s-cnt"></span><span class="sp"></span>
+      <span class="muted">학생 로그인 = 반 코드 <span class="code-big" style="color:var(--text)">${esc(S.cid)}</span> + 아이디 + 비밀번호</span></div>
       <div class="two-col" style="margin-bottom:18px">
         <div class="panel"><h3>학생 한 명 추가</h3>
           <form id="s-add" class="form-grid">
@@ -291,11 +435,11 @@
     if (!/^[A-Za-z0-9_]{2,20}$/.test(id || '')) throw new Error('아이디는 영문·숫자·_ 2~20자');
     if (!name) throw new Error('이름을 입력하세요');
     if (String(pw).length < 6) throw new Error('비밀번호는 6자 이상');
-    if (id.toLowerCase() === 'master') throw new Error('master는 관리자 전용 아이디입니다');
-    if (Object.keys(S.users).length >= MAX_STUDENTS) throw new Error(`최대 ${MAX_STUDENTS}명까지 등록할 수 있어요`);
+    if (Object.keys(S.users).length >= MAX_STUDENTS) throw new Error(`한 반에 최대 ${MAX_STUDENTS}명까지 등록할 수 있어요`);
     if (Object.values(S.users).some((u) => String(u.loginId).toLowerCase() === id.toLowerCase())) throw new Error('이미 있는 아이디');
-    const uid = await B.createAccount(id, pw);
-    await B.update('', {
+    const uid = await B.createAccount(A.accountKey(S.cid, id), pw);
+    await B.set('members/' + uid, { cid: S.cid, role: 'student' });
+    await D.update('', {
       ['users/' + uid]: { loginId: id.toLowerCase(), name, score: R.START_SCORE, placed: 0, wins: 0, losses: 0, draws: 0, rankGames: 0, createdAt: B.now() },
       ['secrets/' + uid]: { pw, loginId: id.toLowerCase() },
     });
@@ -322,7 +466,7 @@
       m.el.querySelector('[data-ok]').onclick = async () => {
         const f = m.el.querySelector('#ed');
         const placed = Math.max(0, Math.min(5, parseInt(f.placed.value, 10) || 0));
-        await B.update('users/' + u, {
+        await D.update('users/' + u, {
           name: f.name.value.trim() || x.name, score: parseInt(f.score.value, 10) || 0, placed,
           week: { key: R.weekKey(B.now()), count: Math.max(0, parseInt(f.week.value, 10) || 0) }, scoreAt: B.now(),
         });
@@ -338,19 +482,20 @@
         try {
           const old = secrets[u] && secrets[u].pw;
           if (!old) throw new Error('저장된 기존 비밀번호가 없어 변경할 수 없어요.');
-          await B.setPassword(x.loginId, old, npw);
-          await B.set('secrets/' + u, { pw: npw, loginId: x.loginId });
+          await B.setPassword(A.accountKey(S.cid, x.loginId), old, npw);
+          await D.set('secrets/' + u, { pw: npw, loginId: x.loginId });
           m.close();
           toast('비밀번호를 변경했어요.', 'good');
         } catch (err) { toast(err.message, 'bad'); }
       };
     } else if (k === 'del') {
       if (!(await confirmBox('학생 삭제', `<b>${esc(x.name)}</b>(${esc(x.loginId)}) 학생을 삭제할까요? 점수와 개인 기록이 모두 사라져요. 되돌릴 수 없어요.`, '삭제', true))) return;
-      try { await B.deleteAccount(x.loginId, secrets[u] && secrets[u].pw); }
+      try { await B.deleteAccount(A.accountKey(S.cid, x.loginId), secrets[u] && secrets[u].pw); }
       catch (err) { console.warn('계정 삭제 실패(데이터만 삭제):', err); }
       const gid = S.active[u];
       if (gid) await A.cancelGame(gid);
-      await B.update('', { ['users/' + u]: null, ['secrets/' + u]: null, ['active/' + u]: null, ['presence/' + u]: null, ['queue/' + u]: null, ['userGames/' + u]: null, ['invites/' + u]: null });
+      await D.update('', { ['users/' + u]: null, ['secrets/' + u]: null, ['active/' + u]: null, ['presence/' + u]: null, ['queue/' + u]: null, ['userGames/' + u]: null, ['invites/' + u]: null });
+      await B.remove('members/' + u);
       toast('삭제했어요.');
     }
   }
@@ -440,7 +585,7 @@
     for (const u of [x.black, x.white]) {
       const d = x.deltas[u];
       if (!d || !S.users[u]) continue;
-      await B.tx('users/' + u, (cur) => {
+      await D.tx('users/' + u, (cur) => {
         if (!cur) return undefined;
         if (d.counted) {
           cur.score = Math.max(0, (cur.score || 0) - d.delta);
@@ -456,7 +601,7 @@
     }
     const upd = { [`log/${gid}/voided`]: true };
     for (const u of [x.black, x.white]) if (S.users[u]) Object.assign(upd, { [`userGames/${u}/${gid}/counted`]: false, [`userGames/${u}/${gid}/delta`]: 0, [`userGames/${u}/${gid}/note`]: '무효 처리' });
-    await B.update('', upd);
+    await D.update('', upd);
     toast('무효 처리했어요.', 'good');
   }
 
@@ -497,7 +642,13 @@
             <div class="foot"><button class="btn danger" id="se-end">시즌 종료 & 챔피언 기록</button></div>
             <div id="se-list"></div>
           </div>
-          <div class="panel"><h3>관리자 계정</h3>
+          <div class="panel"><h3>반 정보</h3>
+            <p class="muted" style="margin-top:0;font-size:.88em">반 코드 <span class="code-big" style="color:var(--text)">${esc(S.cid)}</span> — 학생들이 로그인할 때 입력해요. (반 코드는 바꿀 수 없어요)</p>
+            <label>반 이름<input id="cn-name" value="${esc((S.classMeta || {}).name || '')}"></label>
+            <label>선생님 표시 이름<input id="cn-teacher" value="${esc((S.classMeta || {}).teacherName || '')}"></label>
+            <div class="foot"><button class="btn" id="cn-save">저장</button></div>
+          </div>
+          <div class="panel"><h3>${S.isSuper ? '총관리자 계정' : '관리자 계정'}</h3>
             <label>현재 비밀번호<input id="mp-old" type="password"></label>
             <label>새 비밀번호 (6자 이상)<input id="mp-new" type="password"></label>
             <div class="foot"><button class="btn" id="mp-go">비밀번호 변경</button></div>
@@ -515,19 +666,31 @@
       }
       out.showForbidden = f.showForbidden.value;
       out.confirmMove = f.confirmMove.value === 'true';
-      await B.set('config/settings', out);
+      await D.set('settings', out);
       toast('설정을 저장했어요.', 'good');
     };
     $('#st-def').onclick = async () => {
       if (!(await confirmBox('기본값으로', '모든 규칙 설정을 기본값으로 되돌릴까요?', '되돌리기'))) return;
-      await B.set('config/settings', R.DEFAULT_SETTINGS);
+      await D.set('settings', R.DEFAULT_SETTINGS);
       main().dataset.tab = '';
       A.render();
     };
     $('#se-end').onclick = endSeason;
+    $('#cn-save').onclick = async () => {
+      const name = $('#cn-name').value.trim(), teacherName = $('#cn-teacher').value.trim();
+      if (!name) return toast('반 이름을 입력하세요.', 'bad');
+      await B.update('', {
+        [`classes/${S.cid}/meta/name`]: name, [`classes/${S.cid}/meta/teacherName`]: teacherName,
+        [`classes/${S.cid}/pub/name`]: name, [`classList/${S.cid}/name`]: name, [`classList/${S.cid}/teacherName`]: teacherName,
+      });
+      Object.assign(S.classMeta, { name, teacherName });
+      S.masterName = teacherName || '선생님';
+      toast('반 정보를 저장했어요.', 'good');
+      A.render();
+    };
     $('#mp-go').onclick = async () => {
       try {
-        await B.setPassword('master', $('#mp-old').value, $('#mp-new').value);
+        await B.setPassword(S.loginKey, $('#mp-old').value, $('#mp-new').value);
         toast('관리자 비밀번호를 변경했어요.', 'good');
         $('#mp-old').value = $('#mp-new').value = '';
       } catch (err) { toast(err.message, 'bad'); }
@@ -554,7 +717,7 @@
     const { placed } = A.rankingOrder();
     const now = B.now();
     const key = B.newKey();
-    await B.set('seasons/' + key, {
+    await D.set('seasons/' + key, {
       name, endedAt: now, champion: champ || '', championName: champ ? nameOf(champ) : '', championScore: champ ? S.users[champ].score : null,
       top: placed.slice(0, 10).map((u, i) => ({ rank: i + 1, uid: u, name: nameOf(u), score: S.users[u].score, tier: R.tierOf(S.users[u].score).name })),
     });
@@ -563,7 +726,7 @@
       for (const u of Object.keys(S.users)) {
         Object.assign(upd, { [`users/${u}/score`]: R.START_SCORE, [`users/${u}/placed`]: 0, [`users/${u}/wins`]: 0, [`users/${u}/losses`]: 0, [`users/${u}/draws`]: 0, [`users/${u}/rankGames`]: 0, [`users/${u}/week`]: null, [`users/${u}/recentOpp`]: null, [`users/${u}/placedAt`]: null, [`users/${u}/scoreAt`]: null });
       }
-      await B.update('', upd);
+      await D.update('', upd);
     }
     toast('시즌을 종료했어요.', 'good');
     main().dataset.tab = '';
