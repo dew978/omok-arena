@@ -1,0 +1,70 @@
+{
+  "rules": {
+    "config": {
+      "master": {
+        ".read": true,
+        ".write": "auth != null && !data.exists() && newData.val() === auth.uid"
+      },
+      "masterName": {
+        ".read": true,
+        ".write": "auth != null && root.child('config/master').val() === auth.uid"
+      },
+      "settings": {
+        ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+        ".write": "auth != null && root.child('config/master').val() === auth.uid"
+      }
+    },
+    "users": {
+      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      "$uid": {
+        ".write": "auth != null && (root.child('config/master').val() === auth.uid || (root.child('users/' + auth.uid).exists() && data.exists() && newData.exists()))"
+      }
+    },
+    "secrets": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('config/master').val() === auth.uid)",
+        ".write": "auth != null && root.child('config/master').val() === auth.uid"
+      }
+    },
+    "presence": {
+      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      "$uid": {
+        ".write": "auth != null && (auth.uid === $uid || root.child('config/master').val() === auth.uid)"
+      }
+    },
+    "queue": {
+      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+    },
+    "invites": {
+      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+    },
+    "active": {
+      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+    },
+    "games": {
+      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      "$gid": {
+        ".write": "auth != null && (root.child('config/master').val() === auth.uid || (root.child('users/' + auth.uid).exists() && (data.child('black').val() === auth.uid || data.child('white').val() === auth.uid || newData.child('black').val() === auth.uid || newData.child('white').val() === auth.uid)))"
+      }
+    },
+    "live": {
+      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+    },
+    "userGames": {
+      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+    },
+    "log": {
+      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      ".write": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)"
+    },
+    "seasons": {
+      ".read": "auth != null && (root.child('users/' + auth.uid).exists() || root.child('config/master').val() === auth.uid)",
+      ".write": "auth != null && root.child('config/master').val() === auth.uid"
+    }
+  }
+}

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0c1120">
+  <title>오목 아레나</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23e2b56d'/%3E%3Ccircle cx='12' cy='13' r='6' fill='%23111'/%3E%3Ccircle cx='21' cy='20' r='6' fill='%23fff' stroke='%23999'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 티어 엠블럼 공용 그라데이션 -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="g-bronze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3b27e"/><stop offset=".55" stop-color="#b8672f"/><stop offset="1" stop-color="#6e3714"/></linearGradient>
+      <linearGradient id="g-silver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#b9c3d1"/><stop offset="1" stop-color="#6b7688"/></linearGradient>
+      <linearGradient id="g-gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff2b0"/><stop offset=".5" stop-color="#f2bf3c"/><stop offset="1" stop-color="#a86b0c"/></linearGradient>
+      <linearGradient id="g-platinum" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#d8fff9"/><stop offset=".5" stop-color="#3fd1c2"/><stop offset="1" stop-color="#127a73"/></linearGradient>
+      <linearGradient id="g-diamond" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e6f0ff"/><stop offset=".45" stop-color="#6ea2ff"/><stop offset="1" stop-color="#8f4dff"/></linearGradient>
+      <linearGradient id="g-champion" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3a6"/><stop offset=".5" stop-color="#ffc43d"/><stop offset="1" stop-color="#e2562e"/></linearGradient>
+      <linearGradient id="g-placement" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9aa6c4"/><stop offset="1" stop-color="#4a5572"/></linearGradient>
+      <linearGradient id="g-ai" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9ef0ff"/><stop offset="1" stop-color="#3a6bff"/></linearGradient>
+    </defs>
+  </svg>
+
+  <!-- 로딩 -->
+  <section id="scr-loading" class="screen center">
+    <div class="loader"><div class="stone b"></div><div class="stone w"></div></div>
+    <p class="muted" id="loading-msg">불러오는 중…</p>
+  </section>
+
+  <!-- 로그인 -->
+  <section id="scr-login" class="screen center hidden">
+    <div class="auth-card">
+      <div class="logo-lg"><span class="stone b"></span><span class="stone w"></span></div>
+      <h1>오목 아레나</h1>
+      <p class="muted">렌주룰 · 클래스 랭크 리그</p>
+      <form id="login-form" autocomplete="on">
+        <label>아이디<input id="login-id" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+        <label>비밀번호<input id="login-pw" type="password" autocomplete="current-password" required></label>
+        <button class="btn primary lg" type="submit">입장하기</button>
+        <p class="err" id="login-err"></p>
+      </form>
+      <div class="demo-note hidden" id="demo-note">
+        <b>데모 모드</b> — Firebase가 연결되지 않아 이 브라우저에만 저장됩니다.
+        새 탭을 열어 다른 학생으로 로그인하면 대전을 시험할 수 있어요.
+        <button class="btn ghost sm" id="demo-reset">데모 데이터 초기화</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 최초 관리자 설정 -->
+  <section id="scr-setup" class="screen center hidden">
+    <div class="auth-card">
+      <div class="logo-lg"><span class="stone b"></span><span class="stone w"></span></div>
+      <h1>처음 설정</h1>
+      <p class="muted">관리자(master) 계정을 만듭니다. 아이디는 <b>master</b> 입니다.</p>
+      <form id="setup-form">
+        <label>관리자 표시 이름<input id="setup-name" value="선생님" required></label>
+        <label>비밀번호 (6자 이상)<input id="setup-pw" type="password" minlength="6" autocomplete="new-password" required></label>
+        <label>비밀번호 확인<input id="setup-pw2" type="password" minlength="6" autocomplete="new-password" required></label>
+        <button class="btn primary lg" type="submit">관리자 계정 만들기</button>
+        <p class="err" id="setup-err"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- 학생 홈 -->
+  <section id="scr-home" class="screen hidden">
+    <header class="topbar">
+      <div class="brand"><span class="stone b sm"></span><span class="stone w sm"></span>오목 아레나</div>
+      <div class="top-me" id="home-me"></div>
+      <button class="btn ghost sm" data-act="logout">로그아웃</button>
+    </header>
+    <div id="home-banner"></div>
+    <main class="home-grid" id="home-main"></main>
+  </section>
+
+  <!-- 경기 화면 -->
+  <section id="scr-game" class="screen hidden">
+    <header class="topbar game-top">
+      <button class="btn ghost sm" id="g-back">← 나가기</button>
+      <div class="g-title" id="g-title"></div>
+      <div class="g-tools">
+        <button class="btn ghost sm toggle" id="g-num" title="수순 번호">번호</button>
+      </div>
+    </header>
+    <main class="game-body">
+      <aside class="g-side">
+        <div class="pcards">
+          <div class="pcard" id="pc-1"></div>
+          <div class="pcard" id="pc-2"></div>
+        </div>
+        <div class="g-status" id="g-status"></div>
+        <div class="g-controls" id="g-controls"></div>
+      </aside>
+      <div class="board-area">
+        <div class="board-wrap">
+          <canvas id="g-board"></canvas>
+          <div class="board-overlay hidden" id="g-overlay"></div>
+        </div>
+      </div>
+    </main>
+  </section>
+
+  <!-- 관리자 -->
+  <section id="scr-admin" class="screen hidden">
+    <header class="topbar">
+      <div class="brand"><span class="stone b sm"></span><span class="stone w sm"></span>오목 아레나 <span class="pill">관리자</span></div>
+      <nav class="tabs" id="admin-tabs">
+        <button data-tab="live" class="on">실시간 경기</button>
+        <button data-tab="match">매치 배정</button>
+        <button data-tab="students">학생 관리</button>
+        <button data-tab="ranking">순위표</button>
+        <button data-tab="log">경기 기록</button>
+        <button data-tab="settings">설정</button>
+      </nav>
+      <button class="btn ghost sm" data-act="logout">로그아웃</button>
+    </header>
+    <main id="admin-main" class="admin-main"></main>
+  </section>
+
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+
+  <script src="js/firebase-config.js"></script>
+  <script src="js/renju.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/rating.js"></script>
+  <script src="js/backend.js"></script>
+  <script src="js/board.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
