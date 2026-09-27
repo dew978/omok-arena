@@ -133,8 +133,9 @@
       else if (S.screen === 'game') renderGame();
     };
     // 화면이 숨겨진 상태에서는 requestAnimationFrame이 멈추므로 대체 경로 사용
+    // 화면 갱신 신호(requestAnimationFrame)가 오지 않는 경우를 대비해 0.25초 뒤 한 번 더 시도
     if (document.hidden) setTimeout(run, 0);
-    else requestAnimationFrame(run);
+    else { requestAnimationFrame(run); setTimeout(run, 250); }
   }
   document.addEventListener('visibilitychange', () => { renderPending = false; render(); });
 
