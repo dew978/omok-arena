@@ -1038,6 +1038,23 @@
     ov.querySelector('[data-ov="home"]').onclick = () => leaveGame();
     const ag = ov.querySelector('[data-ov="again"]');
     if (ag) ag.onclick = () => { S.pref.aiLevel = g.aiLevel; leaveGame(); startAI(); };
+    if (g.status === 'finished' && g.mode === 'rank' && participant && g.deltas) maybeTierUp(g, g.deltas[S.uid]);
+  }
+
+  // 랭크전으로 티어가 오르면 승급 장면(js/tierup.js)을 경기마다 한 번만 보여 줌 (결과 화면은 여러 번 다시 그려지므로)
+  const tierUpSeen = new Set();
+  function maybeTierUp(g, d) {
+    if (!window.TierUp || !d || d.placement || !d.pre || !d.post || tierUpSeen.has(g.id)) return;
+    const tb = R.tierOf(d.pre.score || 0), ta = R.tierOf(d.post.score || 0);
+    if (R.TIERS.indexOf(ta) <= R.TIERS.indexOf(tb)) return;
+    tierUpSeen.add(g.id);
+    const key = 'oa-tierup:' + g.id;
+    try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { /* 저장이 막혀도 이 화면에서는 한 번만 */ }
+    window.TierUp.play({
+      from: tb.id, to: ta.id, fromName: tb.name, toName: ta.name, emblem,
+      kicker: '랭크전 결과 · 티어가 올랐어요!',
+      sub: `${ta.min}점을 넘었어요 · 지금 ${d.post.score}점`,
+    });
   }
 
   function deltaLine(d, withNote) {
