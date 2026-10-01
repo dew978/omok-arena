@@ -8,7 +8,7 @@
       this.cv = canvas;
       this.ctx = canvas.getContext('2d');
       this.opts = Object.assign({ interactive: false, onTap: null, mini: false, labels: false }, opts);
-      this.state = { moves: [], win: [], forbidden: [], ghost: -1, ghostColor: 1, numbers: false };
+      this.state = { moves: [], forbidden: [], ghost: -1, ghostColor: 1, numbers: false };
       this.ro = new ResizeObserver(() => this.resize());
       this.ro.observe(canvas);
       if (this.opts.interactive) {
@@ -103,7 +103,7 @@
           ctx.fillText(String(N - i), pad * 0.42, pad + i * cell);
         }
       }
-      const { moves, win, forbidden, ghost, ghostColor, numbers } = this.state;
+      const { moves, forbidden, ghost, ghostColor, numbers } = this.state;
       // 금수 표시
       for (const f of forbidden || []) {
         const r = Math.floor(f.i / N), c = f.i % N;
@@ -115,8 +115,7 @@
         ctx.moveTo(x + s, y - s); ctx.lineTo(x - s, y + s);
         ctx.stroke();
       }
-      // 돌
-      const winSet = new Set(win || []);
+      // 돌 (이긴 다섯 돌 표시는 판 위에 겹친 둘레선 — app.js winRing)
       (moves || []).forEach((m, k) => {
         const r = Math.floor(m / N), c = m % N;
         this.stone(pad + c * cell, pad + r * cell, cell * 0.46, k % 2 === 0 ? 1 : 2, 1);
@@ -127,17 +126,6 @@
           ctx.fillText(String(k + 1), pad + c * cell, pad + r * cell + 1);
         }
       });
-      // 승리 줄
-      if (winSet.size) {
-        for (const m of winSet) {
-          const r = Math.floor(m / N), c = m % N;
-          ctx.strokeStyle = '#ff3b4d';
-          ctx.lineWidth = Math.max(2, cell * 0.1);
-          ctx.beginPath();
-          ctx.arc(pad + c * cell, pad + r * cell, cell * 0.5, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-      }
       // 마지막 수
       if (moves && moves.length && !numbers) {
         const m = moves[moves.length - 1];

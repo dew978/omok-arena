@@ -106,7 +106,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline-color:
 .progress > i { background: #546b47; border-radius: 0; }
 .mode-btn { background: #faf9f1; border: 1px solid #a7b098; border-radius: 2px; box-shadow: 0 2px 0 #cbd5c0; color: var(--text); }
 .mode-btn:hover { background: #e1e9d7; border-color: #6b805c; }
-.mode-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 #cbd5c0; }
+.mode-btn:active, .mode-btn.fx-press { box-shadow: 0 1px 0 #cbd5c0; }
 .seg { background: #e6e8da; border-color: #a0aa95; border-radius: 2px; }
 .seg button { border-radius: 1px; }
 .seg button.on { background: #46593e; color: #fbf9ed; box-shadow: none; }
@@ -148,6 +148,7 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline-color:
 .g-status.warn { background: #f3e1d5; border-color: #cda28a; color: #81372b; }
 .board-wrap { box-shadow: 0 14px 34px #1e281e59, 0 0 0 6px #6b4219, 0 0 0 8px #3a2208; }
 .board-overlay { background: #17251c73; }
+.board-overlay.loss { background: #17251c80; } /* 패배 장면은 조금 더 어둡게 */
 .ov-card { background-color: #f5f5e9; background-image: var(--paper-grain); border: 3px double #8b9b7a; border-radius: 2px; box-shadow: 0 14px 60px #1b281e40; }
 .ov-card h2.win { color: var(--good); } .ov-card h2.loss { color: var(--bad); }
 .score-box { background: #f0f1e6; border-color: #b9c0ad; border-radius: 2px; }

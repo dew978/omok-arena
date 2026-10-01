@@ -1,8 +1,17 @@
 /* 오목 아레나 — 앱 본체 (로그인, 학생 홈, 매칭, 경기 진행, 점수 반영) */
 (function () {
   const B = window.Backend, R = window.Rating, J = window.Renju;
+  // 모션(js/motion.js). 옛 index.html이 캐시에 남아 이 파일만 새로 받은 동안에도 화면은 그대로 동작하게
+  const Fx = window.Fx || { on: () => false, shake() {} };
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  // 내용이 같으면 다시 만들지 않음 — 눌린 버튼, 진행 중인 움직임, 스크롤 위치가 화면 갱신에 끊기지 않게
+  function setHtml(el, html) {
+    if (el._html === html) return false;
+    el._html = html;
+    el.innerHTML = html;
+    return true;
+  }
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const ONLINE_MS = 45000;
   const AI_NAMES = { easy: '쉬움', normal: '보통', hard: '어려움' };
@@ -115,11 +124,57 @@
     return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   };
 
+  /* 화면 전환 — 앞 화면 내용이 위로 빠진 뒤(0.18초) 새 화면이 차례로 떠오름. 상단바는 제자리에서 내용만 바뀜 */
+  const PARTS = { // 화면별 [빠져나갈 덩어리, 차례로 떠오를 요소] — 없는 화면은 그 안의 것 전부
+    home: [['#home-banner', '#home-main'], ['#home-banner .banner', '#home-main .panel']],
+    game: [['.game-body'], ['.board-wrap', '#pc-1', '#pc-2', '#g-status', '#g-controls']],
+    admin: [['#admin-main'], ['#admin-main']],
+  };
+  const parts = (scr, k) => { const p = PARTS[scr.id.slice(4)]; return p ? p[k].flatMap((s) => $$(s, scr)) : [...scr.children]; };
+  let leaving = null;  // 빠져나가는 중인 화면 { el, anims, timer }
+  let entering = null; // 등장 장면 { name, t0 } — 내용이 아직 없으면 그려질 때 시작
   function show(name) {
-    $$('.screen').forEach((s) => s.classList.add('hidden'));
-    $('#scr-' + name).classList.remove('hidden');
     S.screen = name;
+    const to = $('#scr-' + name);
+    const from = $$('.screen').find((s) => !s.classList.contains('hidden'));
+    if (leaving) { if (leaving.el === to) swap(); } // 빠져나가는 중: 끝나면 지금 정한 화면이 나옴 (나가던 화면으로 되돌아올 때만 바로)
+    else if (from && from !== to && Fx.on()) {
+      entering = null;
+      from.classList.add('leaving');
+      const anims = Fx.out(parts(from, 0));
+      const bar = $('.topbar', from);
+      if (bar && !$('.topbar', to)) anims.push(Fx.fade(bar, 1, 0, 180, true));
+      leaving = { el: from, anims, timer: setTimeout(swap, 180) };
+    } else swap();
     render();
+  }
+  function swap() {
+    const to = $('#scr-' + S.screen);
+    const from = leaving ? leaving.el : $$('.screen').find((s) => !s.classList.contains('hidden'));
+    const moved = !!leaving || from !== to;
+    if (leaving) {
+      clearTimeout(leaving.timer);
+      leaving.anims.forEach((a) => a.cancel());
+      leaving.el.classList.remove('leaving');
+      leaving = null;
+    }
+    $$('.screen').forEach((s) => s.classList.toggle('hidden', s !== to));
+    if (!moved) return;
+    entering = Fx.on() ? { name: S.screen, t0: 0 } : null;
+    const bar = $('.topbar', to);
+    if (entering && bar && from && from !== to && !$('.topbar', from)) Fx.fade(bar, 0, 1, 120); // 상단바가 없던 화면에서 올 때만 나타남
+    enterTick();
+  }
+  // 화면이 다시 그려져 새로 생긴 요소는 흐른 시간만큼 건너뛰어 같은 박자로 이어 감
+  function enterTick() {
+    const e = entering;
+    if (!e) return;
+    const els = parts($('#scr-' + e.name), 1);
+    if (!els.length) return;
+    const now = performance.now();
+    if (!e.t0) e.t0 = now;
+    if (now - e.t0 > Fx.RISE_MS) { entering = null; return; }
+    Fx.rise(els, now - e.t0);
   }
   let renderPending = false;
   function render() {
@@ -131,6 +186,7 @@
       if (S.screen === 'home') renderHome();
       else if (S.screen === 'admin' && window.Admin) window.Admin.render();
       else if (S.screen === 'game') renderGame();
+      enterTick();
     };
     // 화면이 숨겨진 상태에서는 requestAnimationFrame이 멈추므로 대체 경로 사용
     // 화면 갱신 신호(requestAnimationFrame)가 오지 않는 경우를 대비해 0.25초 뒤 한 번 더 시도
@@ -161,6 +217,9 @@
     });
   }
 
+  // 안 되는 동작: 이유를 적고 누른 버튼을 흔듦
+  const refuse = (errEl, msg, btn) => { errEl.textContent = msg; Fx.shake(btn); };
+
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     $('#login-err').textContent = '';
@@ -173,7 +232,7 @@
       if (!code && id !== 'master') throw new Error('반 코드를 입력하세요. (총관리자만 비워 둡니다)');
       await B.signIn(accountKey(code, id), $('#login-pw').value);
       try { localStorage.setItem('omokClassCode', code); } catch (e2) {}
-    } catch (err) { $('#login-err').textContent = err.message; }
+    } catch (err) { refuse($('#login-err'), err.message, btn); }
     btn.disabled = false;
   });
   $('#to-signup').addEventListener('click', () => show('signup'));
@@ -191,10 +250,10 @@
     const tname = f.tname.value.trim() || '선생님';
     const id = f.tid.value.trim().toLowerCase();
     const pw = f.pw.value, pw2 = f.pw2.value;
-    if (!CODE_RE.test(code)) { err.textContent = '반 코드는 영문 소문자·숫자·하이픈(-) 2~12자로, 첫 글자는 영문이나 숫자여야 해요.'; return; }
-    if (!ID_RE.test(id)) { err.textContent = '관리자 아이디는 영문 소문자·숫자·_ 2~20자입니다.'; return; }
-    if (pw !== pw2) { err.textContent = '비밀번호가 서로 다릅니다.'; return; }
     const btn = f.querySelector('button[type="submit"]');
+    if (!CODE_RE.test(code)) return refuse(err, '반 코드는 영문 소문자·숫자·하이픈(-) 2~12자로, 첫 글자는 영문이나 숫자여야 해요.', btn);
+    if (!ID_RE.test(id)) return refuse(err, '관리자 아이디는 영문 소문자·숫자·_ 2~20자입니다.', btn);
+    if (pw !== pw2) return refuse(err, '비밀번호가 서로 다릅니다.', btn);
     btn.disabled = true;
     try {
       if (await B.get(`classes/${code}/pub`)) throw new Error('이미 사용 중인 반 코드입니다. 다른 코드를 정하세요.');
@@ -229,7 +288,7 @@
       await startSession(uid);
     } catch (e2) {
       S.settingUp = false;
-      err.textContent = e2.message;
+      refuse(err, e2.message, btn);
     }
     btn.disabled = false;
   });
@@ -242,8 +301,9 @@
     e.preventDefault();
     const name = $('#setup-name').value.trim() || '선생님';
     const pw = $('#setup-pw').value, pw2 = $('#setup-pw2').value;
+    const btn = e.target.querySelector('button');
     $('#setup-err').textContent = '';
-    if (pw !== pw2) { $('#setup-err').textContent = '비밀번호가 서로 다릅니다.'; return; }
+    if (pw !== pw2) return refuse($('#setup-err'), '비밀번호가 서로 다릅니다.', btn);
     S.settingUp = true;
     try {
       const uid = await B.signUpSelf('master', pw);
@@ -254,7 +314,7 @@
       await startSession(uid);
     } catch (err) {
       S.settingUp = false;
-      $('#setup-err').textContent = err.message;
+      refuse($('#setup-err'), err.message, btn);
     }
   });
 
@@ -272,7 +332,7 @@
     } catch (err) {
       await B.signOut();
       show('login');
-      $('#login-err').textContent = err.message;
+      refuse($('#login-err'), err.message, $('#login-form button'));
       return;
     }
     S.isMaster = S.isSuper || mem.role === 'teacher';
@@ -377,12 +437,12 @@
     const placing = (me.placed || 0) < R.PLACEMENT_GAMES;
     const { placed, placing: plist } = rankingOrder();
     const myRank = placed.indexOf(S.uid) + 1;
-    $('#home-me').innerHTML = `${nameTag(S.uid)}<span class="scoretxt muted">${esc(scoreText(S.uid))}</span>`;
+    setHtml($('#home-me'), `${nameTag(S.uid)}<span class="scoretxt muted">${esc(scoreText(S.uid))}</span>`);
 
     const gid = S.active[S.uid];
-    $('#home-banner').innerHTML = gid
+    setHtml($('#home-banner'), gid
       ? `<div class="banner"><span style="font-size:1.6em">⚔️</span><div><b>참여할 경기가 있어요</b><div class="muted">진행 중이거나 선생님이 배정한 경기입니다.</div></div><button class="btn primary lg" data-act="rejoin">경기로 가기</button></div>`
-      : '';
+      : '');
 
     // 프로필
     let prof;
@@ -405,7 +465,8 @@
         ${next ? `<div class="muted" style="margin-top:6px;font-size:.88em">${next.name}까지 ${next.min - me.score}점</div><div class="progress"><i style="width:${Math.max(4, Math.min(100, ((me.score - (real.min === -Infinity ? next.min - 100 : real.min)) / (next.min - (real.min === -Infinity ? next.min - 100 : real.min))) * 100))}%"></i></div>` : ''}
         </div></div>`;
     }
-    const busy = !!gid;
+    // 경기가 있는 동안은 꺼 둠 — 누르면 흔들리며 이유를 알려 줌 (js/motion.js)
+    const busy = gid ? 'disabled data-why="이미 참여 중인 경기가 있어요. 위의 「경기로 가기」를 누르세요."' : '';
     const seg = (key, opts) => `<div class="seg">${opts.map(([v, l]) => `<button data-pref="${key}" data-val="${v}" class="${S.pref[key] === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
 
     // 순위표
@@ -427,15 +488,17 @@
 
     const lastSeason = Object.values(S.seasons || {}).sort((a, b) => b.endedAt - a.endedAt)[0];
 
-    $('#home-main').innerHTML = `
-      <div class="col">
+    // 왼쪽(내 정보·경기 버튼)과 오른쪽(순위표·기록)을 따로 갱신 — 다른 학생의 접속 상태가 바뀔 때 누르던 버튼까지 새로 만들어지지 않게
+    const main = $('#home-main');
+    if (main.children.length !== 2) main.innerHTML = '<div class="col"></div><div class="col"></div>';
+    setHtml(main.children[0], `
         <div class="panel">${prof}</div>
         <div class="panel mode rank">
           <h2>🏆 랭크전</h2>
           <p class="sub">이기면 점수가 오르고 지면 내려가요. 빨리 이길수록 점수 변동이 커요.</p>
           <div class="mode-btns">
-            <button class="mode-btn" data-act="random" ${busy ? 'disabled' : ''}><span class="ic">🎲</span><span class="t">랜덤 매치</span><span class="d">접속자 중 비슷한 티어와 자동 매칭<br>점수 변동 <b>큼</b> (×${st.multRandom})</span></button>
-            <button class="mode-btn" data-act="select" ${busy ? 'disabled' : ''}><span class="ic">🤝</span><span class="t">1:1 선택 매치</span><span class="d">상대를 골라 대결 신청<br>점수 변동 <b>작음</b> (×${st.multSelect})</span></button>
+            <button class="mode-btn" data-act="random" ${busy}><span class="ic">🎲</span><span class="t">랜덤 매치</span><span class="d">접속자 중 비슷한 티어와 자동 매칭<br>점수 변동 <b>큼</b> (×${st.multRandom})</span></button>
+            <button class="mode-btn" data-act="select" ${busy}><span class="ic">🤝</span><span class="t">1:1 선택 매치</span><span class="d">상대를 골라 대결 신청<br>점수 변동 <b>작음</b> (×${st.multSelect})</span></button>
           </div>
         </div>
         <div class="panel mode normal">
@@ -444,12 +507,11 @@
           <div class="opt-row"><span class="lbl">AI 난이도</span>${seg('aiLevel', [['easy', '쉬움'], ['normal', '보통'], ['hard', '어려움']])}</div>
           <div class="opt-row"><span class="lbl">내 돌</span>${seg('aiColor', [['black', '⚫ 흑(먼저)'], ['white', '⚪ 백'], ['random', '랜덤']])}</div>
           <div class="mode-btns">
-            <button class="mode-btn" data-act="ai" ${busy ? 'disabled' : ''}><span class="ic">🤖</span><span class="t">AI와 대전</span><span class="d">혼자 연습하기</span></button>
-            <button class="mode-btn" data-act="friend" ${busy ? 'disabled' : ''}><span class="ic">👥</span><span class="t">친구와 대전</span><span class="d">접속한 친구에게 대결 신청</span></button>
+            <button class="mode-btn" data-act="ai" ${busy}><span class="ic">🤖</span><span class="t">AI와 대전</span><span class="d">혼자 연습하기</span></button>
+            <button class="mode-btn" data-act="friend" ${busy}><span class="ic">👥</span><span class="t">친구와 대전</span><span class="d">접속한 친구에게 대결 신청</span></button>
           </div>
-        </div>
-      </div>
-      <div class="col">
+        </div>`);
+    setHtml(main.children[1], `
         <div class="panel"><h3>📊 순위표 ${S.champion ? `<span class="muted">챔피언: ${esc(nameOf(S.champion))}</span>` : ''}</h3>
           ${lastSeason ? `<p class="muted" style="margin:-4px 0 10px;font-size:.86em">지난 시즌(${esc(lastSeason.name)}) 챔피언 👑 <b style="color:var(--c-champion)">${esc(lastSeason.championName || '-')}</b></p>` : ''}
           <ul class="rank-list">${rankItems || '<li class="empty">아직 등록된 학생이 없어요</li>'}</ul></div>
@@ -461,8 +523,7 @@
             <li><b>백</b>은 금수가 없고, 6목 이상도 승리로 인정돼요.</li>
             <li>랭크전 한 수 제한 시간 ${st.moveTimeRank}초 · 시간이 지나면 패배.</li>
             <li>점수 = 기본점수(짧게 이길수록 큼, 최대 40) ± 상대 점수차 보정</li>
-          </ul></div>
-      </div>`;
+          </ul></div>`);
   }
 
   $('#scr-home').addEventListener('click', (e) => {
@@ -598,7 +659,7 @@
       <p class="muted" style="margin-top:-4px">${kind === 'rank' ? `점수 변동 ×${st.multSelect} · 하루에 같은 상대와 ${st.sameOppStreak}연속째부터는 이겨도 점수 없음(진 사람만 하락)` : '점수 변동 없음'}</p>
       <div class="pick-list">${others.map((u) => {
         const s = status(u);
-        return `<button class="pick-item" data-u="${u}" ${s !== 'idle' ? 'disabled' : ''}>${statusDot(u)}${nameTag(u)}<span class="st">${STATUS_KO[s]}</span></button>`;
+        return `<button class="pick-item" data-u="${u}" ${s !== 'idle' ? `disabled data-why="${STATUS_KO[s]}이라 지금은 신청할 수 없어요."` : ''}>${statusDot(u)}${nameTag(u)}<span class="st">${STATUS_KO[s]}</span></button>`;
       }).join('') || '<p class="empty">다른 학생이 없어요</p>'}</div>
       <div class="foot"><button class="btn ghost" data-close>닫기</button></div>`, { wide: true });
     m.el.addEventListener('click', (e) => {
@@ -709,7 +770,12 @@
     if (!S.isMaster) { S.pst = 'game'; heartbeat(); }
     show('game');
     if (!boardView) boardView = new BoardView($('#g-board'), { interactive: true, labels: true, onTap: onBoardTap });
-    boardView.set({ moves: [], win: [], forbidden: [], ghost: -1 });
+    boardView.set({ moves: [], forbidden: [], ghost: -1 });
+    // 앞 경기의 결과 창과 둘레선을 지움
+    const ov = $('#g-overlay');
+    ov.className = 'board-overlay hidden';
+    setHtml(ov, '');
+    winRing([]);
     $('#g-num').classList.remove('on');
     S.game.unsub = D.on('games/' + gid, (g) => {
       if (!S.game || S.game.gid !== gid) return;
@@ -723,8 +789,7 @@
     if (!G) return;
     G.unsub && G.unsub();
     clearInterval(G.tick);
-    S.game = null;
-    $('#g-overlay').classList.add('hidden');
+    S.game = null; // 결과 창은 화면이 빠져나갈 때 함께 사라지도록 그대로 둠 (다음 경기를 열 때 지움)
   }
   function leaveGame() {
     const G = S.game;
@@ -763,7 +828,8 @@
     if (g.status !== 'active') return;
     const my = colorOf(g, S.uid);
     const moves = g.moves || [];
-    if (!my || turnColor(moves) !== my) return;
+    if (!my) return;
+    if (turnColor(moves) !== my) { Fx.shake($('#g-status')); return; } // 상대 차례 — 이유가 적힌 상태 칸을 흔듦
     if (J.boardFromMoves(moves)[i] !== 0) return;
     if (settings().confirmMove && G.ghost !== i) { G.ghost = i; renderGame(); return; }
     submitMove(i);
@@ -811,7 +877,7 @@
       }
     }
     if ((g.status === 'finished' || g.status === 'cancelled') && !g.scored && (participant || S.isMaster)) finalize(g.id);
-    if (g.status === 'active') G.hideOverlay = false;
+    if (g.status === 'active') { G.hideOverlay = false; G.live = true; } // live: 진행 중이던 경기 — 끝나는 순간 결과 장면을 보여 줌
     // 대국 시작 시 흑백 추첨 결과를 잠깐 보여줌
     if (g.status === 'active' && participant && g.matchType !== 'ai' && !G.announced && !(g.moves || []).length) {
       G.announced = true;
@@ -912,12 +978,20 @@
     if (g.status === 'finished' && g.result && g.result.reason === 'five' && moves.length) {
       win = J.winningLine(board, moves[moves.length - 1]);
     }
-    boardView.set({ moves, win, forbidden: forb, ghost: active && my && tc === my ? G.ghost : -1, ghostColor: my || 1, numbers: G.numbers });
+    boardView.set({ moves, forbidden: forb, ghost: active && my && tc === my ? G.ghost : -1, ghostColor: my || 1, numbers: G.numbers });
+    // 결과 장면: 진행 중이던 경기가 끝나면 한 번 — 이긴 다섯 돌에 둘레선이 그려지는 것을 본 뒤(1.2초) 결과 창이 나옴
+    if (g.status === 'finished' && !G.res) {
+      const w = g.result && g.result.winner;
+      const play = !!G.live && Fx.on();
+      G.res = { kind: my && w ? (w === S.uid ? 'win' : 'loss') : 'plain', play, at: Date.now() + (!play ? 0 : win.length ? 1200 : 250) };
+      if (play) setTimeout(() => { if (S.game === G) renderGame(); }, G.res.at - Date.now() + 20);
+    }
+    winRing(win, !!G.res && G.res.kind === 'loss', !!G.res && G.res.play);
 
     // 상태
     const stEl = $('#g-status');
     stEl.classList.remove('warn');
-    let html = '';
+    let html = '', warn = false;
     if (g.status === 'waiting') {
       const r = g.ready || {};
       html = `준비 대기 중<span class="small">흑 ${r[g.black] ? '✅' : '⏳'} · 백 ${r[g.white] ? '✅' : '⏳'}</span>`;
@@ -927,7 +1001,7 @@
         html = `내 차례예요!<span class="small">${moves.length}수 진행 · ${st.confirmMove ? '같은 자리를 한 번 더 누르거나 [착수]를 누르세요' : '놓을 자리를 누르세요'}</span>`;
         if (G.ghost >= 0 && my === 1) {
           const f = J.forbidden(board, G.ghost);
-          if (f && showF) { stEl.classList.add('warn'); html = `⚠️ 금수 자리 — ${J.REASON_KO[f]}<span class="small">여기에 두면 반칙패가 돼요!</span>`; }
+          if (f && showF) { warn = true; stEl.classList.add('warn'); html = `⚠️ 금수 자리 — ${J.REASON_KO[f]}<span class="small">여기에 두면 반칙패가 돼요!</span>`; }
         }
       } else html = `상대 차례예요…<span class="small">${moves.length}수 진행 · ${esc(nameOf(uidOfColor(g, tc), g))} 생각 중</span>`;
     } else if (g.status === 'finished') {
@@ -936,19 +1010,41 @@
       html += `<span class="small">${REASON_NAMES[r.reason] || ''}${r.reason === 'foul' ? ` (${J.REASON_KO[r.detail] || ''})` : ''} · ${r.moves}수</span>`;
     } else if (g.status === 'cancelled') html = '취소된 경기';
     stEl.innerHTML = html;
+    // 금수 자리를 고르면 경고 칸이 한 번 흔들림 (둘 수는 있지만 반칙패라서 착수 버튼은 막지 않음)
+    if (warn && G.warned !== G.ghost) Fx.shake(stEl);
+    G.warned = warn ? G.ghost : -1;
 
-    // 조작 버튼
+    // 조작 버튼 [동작, 모양, 글자, 꺼 둔 이유] — 같은 버튼은 다시 만들지 않고 켜고 끄기만 함 (누른 반응이 끊기지 않게)
     const ctl = $('#g-controls');
-    let c = '';
+    const bs = [];
     if (!G.spectate && my && active) {
-      if (st.confirmMove) c += `<button class="btn primary place" data-g="place" ${tc === my && G.ghost >= 0 ? '' : 'disabled'}>착수</button>`;
-      c += `<button class="btn danger" data-g="resign">기권</button>`;
+      if (st.confirmMove) bs.push(['place', 'primary place', '착수', tc !== my ? '상대 차례예요.' : G.ghost < 0 ? '놓을 자리를 먼저 누르세요.' : '']);
+      bs.push(['resign', 'danger', '기권']);
     }
-    if (G.spectate && (active || g.status === 'waiting')) c += `<button class="btn danger" data-g="cancel">경기 무효(취소)</button>`;
-    if ((g.status === 'finished' || g.status === 'cancelled') && G.hideOverlay) c += `<button class="btn" data-g="showres">결과 보기</button>`;
-    ctl.innerHTML = c;
+    if (G.spectate && (active || g.status === 'waiting')) bs.push(['cancel', 'danger', '경기 무효(취소)']);
+    if ((g.status === 'finished' || g.status === 'cancelled') && G.hideOverlay) bs.push(['showres', '', '결과 보기']);
+    setHtml(ctl, bs.map(([k, cls, label]) => `<button class="btn ${cls}" data-g="${k}">${label}</button>`).join(''));
+    bs.forEach(([, , , why], i) => { ctl.children[i].disabled = !!why; ctl.children[i].dataset.why = why || ''; });
 
     renderOverlay();
+  }
+
+  // 이긴 다섯 돌 둘레선 — 판 위에 겹친 SVG. 좌표는 판 한 변을 1000으로 본 값 (BoardView.geom과 같은 비율)
+  function winRing(cells, loss, play) {
+    const svg = $('#g-ring');
+    const key = cells.join(',');
+    if (!svg || svg.dataset.key === key) return;
+    svg.dataset.key = key;
+    svg.classList.toggle('loss', !!loss);
+    if (cells.length < 2) { svg.innerHTML = ''; return; }
+    const pad = 60, cell = 880 / (J.N - 1), rad = cell * 0.73;
+    const at = (i) => [pad + (i % J.N) * cell, pad + Math.floor(i / J.N) * cell];
+    const s = [...cells].sort((a, b) => a - b);
+    const [x1, y1] = at(s[0]), [x2, y2] = at(s[s.length - 1]);
+    const len = Math.hypot(x2 - x1, y2 - y1), cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+    const dash = 2 * len + 2 * Math.PI * rad + 2; // 둘레 길이(+이음매 여유)
+    svg.innerHTML = `<rect x="${cx - len / 2 - rad}" y="${cy - rad}" width="${len + 2 * rad}" height="${2 * rad}" rx="${rad}" stroke-dasharray="${dash}" transform="rotate(${(Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI} ${cx} ${cy})"/>`;
+    if (play) Fx.draw(svg.firstChild, dash, 200);
   }
 
   $('#g-controls').addEventListener('click', async (e) => {
@@ -977,11 +1073,11 @@
     if (g.status === 'active' && G.announceUntil && Date.now() < G.announceUntil) {
       const my = colorOf(g, S.uid);
       const opp = my === 1 ? g.white : g.black;
-      ov.innerHTML = `<div class="ov-card reveal"><div class="muted">🎲 흑백 추첨 결과</div>
+      setHtml(ov, `<div class="ov-card reveal"><div class="muted">🎲 흑백 추첨 결과</div>
         <div style="display:flex;justify-content:center;margin:14px 0"><span class="stone ${my === 1 ? 'b' : 'w'}" style="width:64px;height:64px"></span></div>
         <h2 style="font-size:1.8em">나는 ${my === 1 ? '흑' : '백'}</h2>
         <div class="reason">${my === 1 ? '먼저 둡니다 · 삼삼·사사·장목 금수 주의!' : '두 번째로 둡니다 · 금수 없음'}</div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:6px">상대 ${nameTag(opp)} ${my === 1 ? '⚪ 백' : '⚫ 흑'}</div></div>`;
+        <div style="display:flex;align-items:center;justify-content:center;gap:6px">상대 ${nameTag(opp)} ${my === 1 ? '⚪ 백' : '⚫ 흑'}</div></div>`);
       ov.classList.remove('hidden');
       ov.onclick = () => { G.announceUntil = 0; ov.onclick = null; renderGame(); };
       return;
@@ -990,19 +1086,19 @@
     if (g.status === 'waiting') {
       const r = g.ready || {};
       const meReady = r[S.uid];
-      ov.innerHTML = `<div class="ov-card"><div style="font-size:2.2em">📋</div><h3 style="margin:.2em 0">${g.matchType === 'assigned' ? `${esc(S.masterName)}이(가) 배정한 경기` : '경기 준비'}</h3>
+      setHtml(ov, `<div class="ov-card"><div style="font-size:2.2em">📋</div><h3 style="margin:.2em 0">${g.matchType === 'assigned' ? `${esc(S.masterName)}이(가) 배정한 경기` : '경기 준비'}</h3>
         <p class="muted">${esc(modeTitle(g))}</p>
         <div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin:14px 0">
           <div><span class="stone b sm"></span> ${nameTag(g.black)} ${r[g.black] ? '✅ 준비 완료' : '⏳ 대기'}</div>
           <div><span class="stone w sm"></span> ${nameTag(g.white)} ${r[g.white] ? '✅ 준비 완료' : '⏳ 대기'}</div>
         </div>
         ${participant && !meReady ? '<button class="btn primary lg" data-ov="ready">준비 완료!</button>' : participant ? '<p class="muted">상대가 준비하면 바로 시작해요.</p>' : ''}
-      </div>`;
+      </div>`);
       ov.classList.remove('hidden');
-      ov.querySelector('[data-ov="ready"]')?.addEventListener('click', () => D.set(`games/${g.id}/ready/${S.uid}`, true));
       return;
     }
-    if (!(g.status === 'finished' || g.status === 'cancelled') || G.hideOverlay) { ov.classList.add('hidden'); return; }
+    const res = G.res || { kind: 'plain', play: false, at: 0 }; // 결과 장면 (renderGame에서 정함)
+    if (!(g.status === 'finished' || g.status === 'cancelled') || G.hideOverlay || Date.now() < res.at) { ov.classList.add('hidden'); return; }
     const r = g.result || {};
     let title = '', cls = '';
     if (g.status === 'cancelled') title = '경기 취소';
@@ -1031,14 +1127,52 @@
       if (g.matchType === 'ai') btns.push('<button class="btn good" data-ov="again">다시 하기</button>');
       btns.push('<button class="btn primary" data-ov="home">홈으로</button>');
     }
-    ov.innerHTML = `<div class="ov-card"><h2 class="${cls}">${esc(title)}</h2><div class="reason">${esc(reason)}</div>${box}<div class="btns">${btns.join('')}</div></div>`;
+    // 창 자체는 그대로 두고 점수 칸만 따로 갱신 — 점수가 늦게 도착해도 창과 낙관의 움직임이 끊기지 않게
+    const seal = res.kind === 'win' ? '<div class="seal" aria-hidden="true">勝</div>' : res.kind === 'loss' ? '<div class="seal gray" aria-hidden="true">敗</div>' : '';
+    setHtml(ov, `<div class="ov-card res">${seal}<h2 class="${cls}">${esc(title)}</h2><div class="reason">${esc(reason)}</div><div class="ov-score"></div><div class="btns">${btns.join('')}</div></div>`);
+    setHtml($('.ov-score', ov), box);
+    ov.classList.toggle('loss', res.kind === 'loss');
     ov.classList.remove('hidden');
-    ov.querySelector('[data-ov="board"]').onclick = () => { G.hideOverlay = true; renderGame(); };
-    ov.querySelector('[data-ov="home"]').onclick = () => leaveGame();
-    const ag = ov.querySelector('[data-ov="again"]');
-    if (ag) ag.onclick = () => { S.pref.aiLevel = g.aiLevel; leaveGame(); startAI(); };
-    if (g.status === 'finished' && g.mode === 'rank' && participant && g.deltas) maybeTierUp(g, g.deltas[S.uid]);
+
+    /* 결과 장면 (처음 나타날 때 한 번)
+       승리: 창이 떠오름(0.4초) → 붉은 낙관 「勝」이 찍힘(0.18초, 닿는 순간 창이 살짝 떨림) → 점수가 오름(0.5초)
+       패배: 같은 순서를 먹빛으로 — 창이 위에서 조용히 내려앉고(0.5초) 「敗」은 번지듯 나타남. 충격 없음 */
+    if (!res.shown) {
+      res.shown = true;
+      const card = ov.firstElementChild, mark = $('.seal', card);
+      if (!res.play) res.count = 0;
+      else if (res.kind === 'loss') { Fx.dim(ov, 350); Fx.settle(card, 50); Fx.seep(mark, 650, 400); res.count = Date.now() + 850; res.countMs = 400; }
+      else {
+        Fx.dim(ov, 250); Fx.lift(card);
+        if (mark) Fx.stamp(mark, card, 550);
+        res.count = Date.now() + (mark ? 950 : 400); res.countMs = 500;
+      }
+    }
+    // 점수가 도착하면 한 번: 숫자가 0에서 올라가고(count-up), 다 오른 뒤에 티어 승급 장면
+    const d = g.status === 'finished' && g.mode === 'rank' && participant && g.deltas ? g.deltas[S.uid] : null;
+    if (d && !res.counted) {
+      res.counted = true;
+      const num = $('[data-cu]', ov), sum = $('[data-cu-post]', ov);
+      const tierUp = () => maybeTierUp(g, d);
+      if (!res.play || !num || !d.delta) tierUp();
+      else {
+        const pre = (d.pre || {}).score || 0, post = (d.post || {}).score || 0;
+        const step = (p) => { num.textContent = `${d.delta > 0 ? '+' : '-'}${Math.abs(Math.round(d.delta * p))}점`; if (sum) sum.textContent = pre + Math.round((post - pre) * p); };
+        step(0);
+        setTimeout(() => Fx.tween(res.countMs, step, () => setTimeout(tierUp, 350)), Math.max(0, res.count - Date.now()));
+      }
+    }
   }
+  $('#g-overlay').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ov]');
+    const G = S.game, g = G && G.data;
+    if (!b || !g) return;
+    const k = b.dataset.ov;
+    if (k === 'ready') D.set(`games/${g.id}/ready/${S.uid}`, true);
+    else if (k === 'board') { G.hideOverlay = true; renderGame(); }
+    else if (k === 'home') leaveGame();
+    else if (k === 'again') { S.pref.aiLevel = g.aiLevel; leaveGame(); startAI(); }
+  });
 
   // 랭크전으로 티어가 오르면 승급 장면(js/tierup.js)을 경기마다 한 번만 보여 줌 (결과 화면은 여러 번 다시 그려지므로)
   const tierUpSeen = new Set();
@@ -1080,8 +1214,8 @@
     const tb = R.tierOf(pre.score || 0), ta = R.tierOf(post.score || 0);
     const change = tb !== ta ? (R.TIERS.indexOf(ta) > R.TIERS.indexOf(tb) ? `<div style="margin-top:8px;font-weight:800;color:var(--good)">🎉 ${ta.name} 승급!</div>` : `<div style="margin-top:8px;font-weight:700;color:var(--bad)">${ta.name}(으)로 강등</div>`) : '';
     const det = d.detail ? `기본 ${d.detail.B} ${d.detail.C >= 0 ? '+' : '−'} 보정 ${Math.abs(d.detail.C)}${d.detail.mult !== 1 ? ` × ${d.detail.mult}` : ''}` : '';
-    return `<div class="score-box"><div class="big delta ${cls}" style="margin:0">${d.delta > 0 ? '+' : ''}${d.delta}점</div>
-      <div>${pre.score ?? ''} → <b>${post.score ?? ''}</b>점</div>
+    return `<div class="score-box"><div class="big delta ${cls}" style="margin:0" data-cu>${d.delta > 0 ? '+' : ''}${d.delta}점</div>
+      <div>${pre.score ?? ''} → <b data-cu-post>${post.score ?? ''}</b>점</div>
       ${det ? `<div class="formula">${det}</div>` : ''}${d.note ? `<div class="formula" style="color:var(--warn)">${esc(d.note)}</div>` : ''}${change}</div>`;
   }
 

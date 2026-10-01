@@ -124,6 +124,7 @@
       <div class="board-area">
         <div class="board-wrap">
           <canvas id="g-board"></canvas>
+          <svg class="win-ring" id="g-ring" viewBox="0 0 1000 1000" aria-hidden="true"></svg>
           <div class="board-overlay hidden" id="g-overlay"></div>
         </div>
       </div>
@@ -150,7 +151,7 @@
   </section>
 
   <div id="modal-root"></div>
-  <div id="toast-root"></div>
+  <div id="toast-root" role="status" aria-live="polite"></div>
 
   <script src="js/firebase-config.js"></script>
   <script src="js/renju.js"></script>
@@ -159,6 +160,7 @@
   <script src="js/backend.js"></script>
   <script src="js/board.js"></script>
   <script src="js/tierup.js"></script>
+  <script src="js/motion.js"></script>
   <script src="js/app.js"></script>
   <script src="js/admin.js"></script>
 </body>

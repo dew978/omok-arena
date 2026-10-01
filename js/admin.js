@@ -54,7 +54,7 @@
       const lb = $('#admin-tabs [data-tab="live"]');
       lb.innerHTML = `실시간 경기${n ? `<span class="cnt">${n}</span>` : ''}`;
       // 반을 고르기 전에는 반 관리 탭만 사용
-      $$('#admin-tabs button').forEach((b) => { if (b.dataset.tab !== 'classes') b.disabled = !S.cid; });
+      $$('#admin-tabs button').forEach((b) => { if (b.dataset.tab !== 'classes') { b.disabled = !S.cid; b.dataset.why = S.cid ? '' : '먼저 반을 고르세요.'; } });
       if (!S.cid && tab !== 'classes') setTab(S.isSuper ? 'classes' : 'live');
       if (!S.cid && tab !== 'classes') { main().innerHTML = '<p class="empty">반 정보를 불러오는 중…</p>'; main().dataset.tab = ''; return; }
       if (main().dataset.tab !== tab) {
@@ -62,6 +62,7 @@
         main().dataset.tab = tab;
         main().dataset.key = '';
         SKELETON[tab]();
+        if (window.Fx && window.Fx.on()) window.Fx.rise([main()]); // 탭을 바꾸면 내용이 떠오름 (js/motion.js)
       }
       RENDER[tab]();
     },

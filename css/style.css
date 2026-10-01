@@ -49,11 +49,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn {
   border: 1px solid var(--line); background: var(--card2); color: var(--text);
   padding: .62em 1.1em; border-radius: 12px; cursor: pointer; font-weight: 600;
-  transition: transform .08s ease, background .15s, border-color .15s, opacity .15s;
+  transition: transform .2s cubic-bezier(.33, 1, .68, 1), background .15s, border-color .15s, opacity .15s;
   display: inline-flex; align-items: center; justify-content: center; gap: .45em; white-space: nowrap;
 }
 .btn:hover { border-color: #3a4a7c; }
-.btn:active { transform: scale(.97); }
 .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 .btn.primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); border-color: transparent; }
 .btn.good { background: linear-gradient(135deg, #22b673, #1b8f8a); border-color: transparent; }
@@ -164,10 +163,9 @@ label > input, label > select, label > textarea { margin-top: .35em; color: var(
 .mode-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .mode-btn {
   border: 1px solid var(--line); background: #10183a; border-radius: 16px; padding: 18px 16px; text-align: left; cursor: pointer;
-  display: flex; flex-direction: column; gap: 6px; min-height: 112px; transition: transform .08s, border-color .15s, background .15s;
+  display: flex; flex-direction: column; gap: 6px; min-height: 112px;
 }
 .mode-btn:hover { border-color: var(--accent); background: #13204a; }
-.mode-btn:active { transform: scale(.98); }
 .mode-btn:disabled { opacity: .5; cursor: not-allowed; }
 .mode-btn .t { font-size: 1.25em; font-weight: 800; }
 .mode-btn .d { color: var(--muted); font-size: .88em; line-height: 1.4; }
@@ -353,3 +351,29 @@ label > input, label > select, label > textarea { margin-top: .35em; color: var(
 .tu-sub { margin-top: 6px; color: #9fb0d8; font-size: .95em; }
 .tu-ok { margin-top: 22px; min-width: 170px; }
 @media (prefers-reduced-motion: reduce) { .tu-bg { animation: none; } }
+
+/* ── 모션 (js/motion.js) ── */
+/* 화면 전환: 빠져나가는 화면은 누를 수 없음 */
+.screen.leaving { pointer-events: none; }
+/* 버튼 (cursor-click): 0.1초에 0.96배로 눌리고 0.2초에 돌아옴. fx-press는 짧게 톡 눌러도 0.1초는 눌려 보이게 붙이는 표시 */
+.mode-btn, .pick-item, .seg button, .tabs button { transition: transform .2s cubic-bezier(.33, 1, .68, 1), background .15s, border-color .15s; }
+.btn:active, .btn.fx-press, .mode-btn:active, .mode-btn.fx-press, .pick-item:active, .pick-item.fx-press,
+.seg button:active, .seg button.fx-press, .tabs button:active, .tabs button.fx-press { transform: scale(.96); transition: transform .1s cubic-bezier(.32, 0, .67, 0); }
+/* 번지는 자국은 버튼 안에서만 */
+.fx-host { position: relative; }
+.fx-rip { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.fx-rip > i { position: absolute; border-radius: 50%; background: currentColor; opacity: 0; }
+/* 꺼진 버튼은 누름이 뒤로 통과 — 브라우저마다 꺼진 버튼의 누름 이벤트가 달라서, 누른 자리를 직접 찾아 흔들고 이유를 알려 줌 */
+button:disabled { pointer-events: none; }
+/* 결과 장면: 이긴 다섯 돌 둘레선(circumscribe)과 낙관(stamp-impact) */
+.win-ring { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.win-ring rect { fill: none; stroke: #a5382b; stroke-width: 5; }
+.win-ring.loss rect { stroke: #4a524b; }
+.ov-card.res { position: relative; }
+.seal {
+  position: absolute; right: 18px; top: 14px; width: 64px; height: 64px; display: flex; align-items: center; justify-content: center;
+  font: 700 42px/1 "Batang", "AppleMyungjo", "Noto Serif KR", "Malgun Gothic", serif; color: #fbeee6;
+  background: #a5382b; border: 3px double #f3d9d0; outline: 2px solid #a5382b; border-radius: 3px; transform: rotate(-6deg);
+}
+.seal.gray { background: #6b7268; outline-color: #6b7268; border-color: #dfe2d6; color: #f1f1e8; opacity: .9; }
+@media (max-width: 560px) { .seal { right: 10px; top: 10px; width: 48px; height: 48px; font-size: 31px; } }
