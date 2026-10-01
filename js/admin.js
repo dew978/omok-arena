@@ -152,7 +152,7 @@
     refreshCounts(true);
     $('#cl-cnt').textContent = `${list.length}개 반`;
     $('#cl-table').innerHTML = list.length ? `<table class="tbl"><thead><tr><th>반 코드</th><th>반 이름</th><th>담당 선생님</th><th class="num">학생</th><th>만든 날</th><th></th></tr></thead><tbody>
-      ${list.map(([cid, c]) => `<tr${cid === S.cid ? ' style="background:rgba(79,140,255,.08)"' : ''}><td><span class="code-big">${esc(cid)}</span></td><td><b>${esc(c.name)}</b></td><td>${esc(c.teacherName || '')}</td>
+      ${list.map(([cid, c]) => `<tr${cid === S.cid ? ' style="background:rgba(70,89,62,.12)"' : ''}><td><span class="code-big">${esc(cid)}</span></td><td><b>${esc(c.name)}</b></td><td>${esc(c.teacherName || '')}</td>
         <td class="num">${counts[cid] ? counts[cid].n : '…'} / ${MAX_STUDENTS}</td><td>${c.createdAt ? A.fmtTime(c.createdAt) : ''}</td>
         <td><div class="row-actions"><button class="btn xs primary" data-c="open" data-cid="${esc(cid)}">관리하기</button><button class="btn xs danger" data-c="del" data-cid="${esc(cid)}">반 삭제</button></div></td></tr>`).join('')}
       </tbody></table>` : `<p class="empty" style="padding:30px;line-height:1.7">아직 만들어진 반이 없어요.<br>오른쪽에서 <b>가입 코드</b>를 정해 선생님에게 알려 주세요.</p>`;

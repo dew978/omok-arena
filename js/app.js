@@ -381,7 +381,7 @@
 
     const gid = S.active[S.uid];
     $('#home-banner').innerHTML = gid
-      ? `<div class="banner"><span style="font-size:1.6em">⚔️</span><div><b>참여할 경기가 있어요</b><div class="muted" style="color:#c9d4ff">진행 중이거나 선생님이 배정한 경기입니다.</div></div><button class="btn primary lg" data-act="rejoin">경기로 가기</button></div>`
+      ? `<div class="banner"><span style="font-size:1.6em">⚔️</span><div><b>참여할 경기가 있어요</b><div class="muted">진행 중이거나 선생님이 배정한 경기입니다.</div></div><button class="btn primary lg" data-act="rejoin">경기로 가기</button></div>`
       : '';
 
     // 프로필

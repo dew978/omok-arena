@@ -140,6 +140,7 @@
 ```
 index.html              화면 구조
 css/style.css           디자인 (티어 테두리·엠블럼 포함)
+css/ink-theme.css       수묵 테마 — 한자 티어와 같은 한지 패널·먹빛 버튼·짙은 먹 상단바 (style.css 위에 덮어씀, 이 파일을 빼면 예전 어두운 화면)
 assets/ink-landscape.jpg 배경 그림 (한자 티어와 같은 수묵 산수, 용량을 줄인 JPG)
 js/renju.js             렌주룰 엔진 (승리·금수 판정)
 js/ai.js                AI (쉬움/보통/어려움, 어려움은 연속 4 공격 탐색)

@@ -1,0 +1,187 @@
+/* 수묵 테마 — 한자 티어(ink-theme.css)와 같은 한지 패널·먹빛 버튼. style.css 위에 덮어씀
+   (이 파일만 빼면 예전 어두운 화면으로 돌아감. 배경 그림은 style.css의 body::before) */
+:root {
+  color-scheme: light;
+  --bg: #d9d8cd;
+  --bg2: #e6e6da;
+  --card: #f5f3eb;
+  --card2: #e6e6da;
+  --line: #9c9f91;
+  --text: #282f2b;
+  --muted: #596155;
+  --accent: #343e36;
+  --accent2: #56634e;
+  --good: #3f6b46;
+  --bad: #913e35;
+  --warn: #9a6a1f;
+  --radius: 2px;
+  --shadow: 0 5px 18px #26342914;
+  /* 한지 위에서 읽히도록 티어 색을 조금 짙게 */
+  --c-bronze: #a5602d; --c-silver: #6c7a8c; --c-gold: #a87900; --c-platinum: #0f877b; --c-diamond: #3d63c9; --c-champion: #c46a00; --c-placement: #7d8577;
+  --paper-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220' viewBox='0 0 220 220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.62' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.065'/%3E%3Cg stroke='%23816b42' stroke-width='.5' opacity='.12'%3E%3Cpath d='M12 37l21-3m63 36l18 4m54-53l-5 17M45 134l30-5m87 26l21 3M17 196l26-2m72 13l15-5m66-91l-4 18'/%3E%3C/g%3E%3C/svg%3E");
+  --paper: #f5f3ebf7;
+}
+::selection { background: #bdc7b5; color: #252d27; }
+
+/* ── 상단바: 짙은 먹 + 겹줄 ── */
+.topbar {
+  background-color: #2e3730;
+  background-image: var(--paper-grain), linear-gradient(100deg, #202a23, #475046);
+  backdrop-filter: none;
+  border-bottom: 3px double #777e69;
+  color: #faf5e8;
+  box-shadow: 0 4px 18px #18201b30;
+}
+.brand { letter-spacing: .06em; }
+.topbar .muted { color: #d3d7c8; }
+.topbar .pill { background: #843e35; color: #fbf3e6; border-color: #b98877; }
+.game-top .g-title { color: #faf5e8; letter-spacing: .02em; }
+.tabs button { color: #cfd3c4; border-radius: 2px; }
+.tabs button:hover { color: #faf5e8; background: #faf5e80f; }
+.tabs button.on { background: #faf5e81f; color: #faf5e8; box-shadow: inset 0 -2px 0 #e5d7bd; }
+.admin-class .code { background: #ffffff10; border-color: #8c9684; color: #f0eedf; border-radius: 2px; }
+
+/* ── 버튼 ── */
+.btn { border: 1px solid #a0aa95; border-radius: 2px; background: #edf0e2; color: #303d2f; box-shadow: 0 1px 2px #1f30221c; }
+.btn:hover { background: #dce4d2; border-color: #697b60; }
+.btn.lg, .btn.sm, .btn.xs { border-radius: 2px; }
+.btn.primary { color: #fbf8ec; background: #344435; border-color: #344435; box-shadow: inset 0 0 0 2px #f8f6e91a, 0 2px 4px #21331e22; }
+.btn.primary:hover { background: #263929; border-color: #263929; }
+.btn.good { color: #fbf8ec; background: #4f6449; border-color: #40563b; }
+.btn.good:hover { background: #40563b; }
+.btn.danger { color: #853f30; background: #f6ece4; border-color: #ad8175; }
+.btn.danger:hover { background: #f1e1d9; border-color: #8f5a4c; }
+.btn.ghost { background: transparent; box-shadow: none; }
+.btn.ghost:hover { background: #e2e9d8; }
+.btn.toggle.on { background: #d4e2c7; border-color: #425c34; }
+/* 상단바(짙은 먹) 안의 버튼은 밝은 글씨 그대로 — 위의 일반 버튼 규칙보다 뒤에, 더 구체적으로 */
+.topbar .btn, .topbar .btn.ghost { color: #f0eedf; background: #ffffff08; border-color: #8c9684; box-shadow: none; }
+.topbar .btn:hover, .topbar .btn.ghost:hover { background: #faf8ee1c; border-color: #e0e3d1; }
+.topbar .btn.toggle.on { background: #f0eedf; color: #2e3730; border-color: #f0eedf; }
+.pill { background: #e9eddd; color: #455639; border: 1px solid #a0aa91; border-radius: 1px; }
+
+/* ── 입력란 ── */
+input, select, textarea { background: #fcfbf2; border-color: #99a28c; border-radius: 2px; color: var(--text); accent-color: #344435; }
+input::placeholder, textarea::placeholder { color: #7a8471; }
+input:focus, select:focus, textarea:focus { border-color: #4f5d48; box-shadow: 0 0 0 3px #b9c9a866; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline-color: #72452f; }
+
+/* ── 한지 패널 ── */
+.panel, .tbl-wrap, .live-card, .g-status, .pcard {
+  background-color: var(--paper);
+  background-image: var(--paper-grain);
+  border-color: #989e8d;
+  border-radius: 2px;
+}
+.panel { box-shadow: 0 5px 18px #26342914, inset 0 0 0 4px #e5e4d83d; }
+.panel h3 { color: #2e3d30; }
+.mode.rank { background-color: var(--paper); background-image: var(--paper-grain), linear-gradient(135deg, #e7dcc266, transparent 70%); }
+.mode.normal { background-color: var(--paper); background-image: var(--paper-grain), linear-gradient(135deg, #d9e5cf66, transparent 70%); }
+.auth-card {
+  background-color: #f6f4eaf5;
+  background-image: var(--paper-grain);
+  backdrop-filter: none;
+  border: 1px solid #858d7b;
+  border-top: 5px double #4f5d48;
+  border-radius: 2px;
+  box-shadow: 5px 5px 0 -1px #e4e5d8, 5px 5px 0 0 #818e78, 0 18px 60px #1b281e33;
+}
+.auth-card h1 { color: #263a2c; letter-spacing: .08em; }
+.demo-note { background: #eee0ba; border-color: #c9b47a; color: #625025; border-radius: 2px; }
+.banner {
+  background-color: var(--paper);
+  background-image: var(--paper-grain);
+  border: 1px solid #989e8d;
+  border-left: 5px solid #843e35;
+  border-radius: 2px;
+  color: var(--text);
+}
+/* 판 위가 아닌 그림 위에 바로 놓이는 제목은 한지 빛 번짐으로 읽기 쉽게 */
+.a-head h2 { color: #243329; text-shadow: 0 1px 6px #faf8ec, 0 0 2px #faf8ec; }
+
+/* ── 학생 홈 ── */
+.profile .big-emb svg { filter: drop-shadow(0 4px 8px #26342940); }
+.stats b { color: var(--text); }
+.progress { background: #d9dfcc; border-color: #b7bfa9; border-radius: 1px; }
+.progress > i { background: #546b47; border-radius: 0; }
+.mode-btn { background: #faf9f1; border: 1px solid #a7b098; border-radius: 2px; box-shadow: 0 2px 0 #cbd5c0; color: var(--text); }
+.mode-btn:hover { background: #e1e9d7; border-color: #6b805c; }
+.mode-btn:active { transform: translateY(1px); box-shadow: 0 1px 0 #cbd5c0; }
+.seg { background: #e6e8da; border-color: #a0aa95; border-radius: 2px; }
+.seg button { border-radius: 1px; }
+.seg button.on { background: #46593e; color: #fbf9ed; box-shadow: none; }
+.rank-list li, .hist li { background: #fbfaf3; border: 1px solid #d3d6c8; border-radius: 2px; }
+.rank-list li.me { outline: 2px solid #536548; outline-offset: -1px; background: #eef3e6; }
+.rank-list li:nth-child(1) .no { color: #a87900; } .rank-list li:nth-child(2) .no { color: #6c7a8c; } .rank-list li:nth-child(3) .no { color: #a5602d; }
+.dot { background: #b9bdb0; }
+.dot.on { background: #4f8a55; box-shadow: 0 0 5px #4f8a5588; }
+.dot.game { background: #c08a2e; }
+.dot.queue { background: #46593e; }
+.res { border-radius: 1px; }
+.res.win { background: #dfe8d6; color: #3d5a3a; }
+.res.loss { background: #f1dfd8; color: #8a3a2f; }
+.res.draw { background: #e6e6da; color: var(--muted); }
+.rules { color: #3f4a3e; }
+
+/* ── 이름표: 한지 속지 + 티어 색 테두리 ── */
+.ntag { color: var(--text); background: linear-gradient(#fbfaf4, #fbfaf4) padding-box, linear-gradient(135deg, var(--tc), color-mix(in srgb, var(--tc) 55%, #000)) border-box; } /* 짙은 상단바 안에서도 이름이 짙은 글씨로 */
+.ntag svg.emb { filter: drop-shadow(0 1px 1px #1e281e59); }
+.t-silver, .t-gold, .t-platinum { box-shadow: none; }
+.t-diamond { box-shadow: 0 0 8px #3d63c933; background: linear-gradient(#fbfaf4, #fbfaf4) padding-box, linear-gradient(135deg, #8fb6e6, #3d63c9, #7b4fd0, #3d63c9) border-box; }
+.t-champion {
+  background: linear-gradient(#fff8ea, #fff8ea) padding-box, linear-gradient(90deg, #ffd24a, #ff8a3d, #ff3d6e, #ffb02e, #ffd24a) border-box;
+  background-size: 100% 100%, 300% 100%;
+  box-shadow: 0 0 10px #ff963c55;
+}
+.t-champion .nm { background: linear-gradient(90deg, #a86300, #e08a00, #a86300); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.t-placement { background: #fbfaf4; border-color: #8d9583; }
+.t-ai { --tc: #3f6f8f; }
+.t-none { --tc: #a3a898; }
+
+/* ── 경기 화면 ── */
+.pcard { border-width: 2px; border-color: #b5bba8; }
+.pcard.turn { border-color: #46593e; box-shadow: 0 0 0 3px #b9c9a8aa, var(--shadow); }
+.pcard .you { background: #843e35; color: #fbf3e6; border-radius: 1px; }
+.timer { background: #d5dacb; border-radius: 0; }
+.timer > i { background: #4f7a4f; border-radius: 0; }
+.timer.warn > i { background: #b8862b; } .timer.crit > i { background: #a5432f; }
+.g-status.warn { background: #f3e1d5; border-color: #cda28a; color: #81372b; }
+.board-wrap { box-shadow: 0 14px 34px #1e281e59, 0 0 0 6px #6b4219, 0 0 0 8px #3a2208; }
+.board-overlay { background: #17251c73; }
+.ov-card { background-color: #f5f5e9; background-image: var(--paper-grain); border: 3px double #8b9b7a; border-radius: 2px; box-shadow: 0 14px 60px #1b281e40; }
+.ov-card h2.win { color: var(--good); } .ov-card h2.loss { color: var(--bad); }
+.score-box { background: #f0f1e6; border-color: #b9c0ad; border-radius: 2px; }
+
+/* ── 창·알림 ── */
+.modal-bg { background: #17251cb3; }
+.modal { background-color: #f5f5e9; background-image: var(--paper-grain); border: 3px double #8b9b7a; border-radius: 2px; box-shadow: 0 14px 60px #30230f30; }
+.pick-item { background: #faf9f1; border-color: #a7b098; border-radius: 2px; }
+.pick-item:hover:not(:disabled) { border-color: #46593e; background: #eef3e6; }
+.searching .rings i { border-color: #46593e; }
+.toast { background: #e3e8d8; color: #344b35; border: 1px solid #99ad8d; border-radius: 2px; box-shadow: 0 4px 20px #493a1e22; }
+.toast.bad { background: #f3e1d5; color: #81372b; border-color: #cda28a; }
+.toast.good { background: #dfe8d6; color: #2f4b32; border-color: #8fae84; }
+
+/* ── 관리자 ── */
+.live-card:hover { border-color: #46593e; }
+.tbl th { color: #40553a; background: #e4ebd9; }
+.tbl th, .tbl td { border-bottom-color: #c6d0bc; }
+.tbl tr:hover td { background: #dce9cf7a; }
+.stu-pick label { background: #faf9f1; border-color: #a7b098; border-radius: 2px; color: var(--text); }
+.stu-pick label.sel { background: #dce7cf; border-color: #425c34; }
+.pairs .p { background: #faf9f1; border: 1px solid #c5ccb8; border-radius: 2px; }
+.form-grid label small { color: #66705f; }
+.tier-bars .bar { background: #dfe2d4; border-radius: 1px; }
+.tier-bars .bar i { border-radius: 1px; }
+.spectate-tag { background: #843e35; color: #fbf3e6; border-radius: 1px; }
+
+/* ── 티어 승급 장면: 짙은 먹빛 위에 밝은 티어 색 ── */
+.tu-bg {
+  --c-bronze: #cf8650; --c-silver: #c3cedd; --c-gold: #f5c542; --c-platinum: #3fd1c2; --c-diamond: #7fa6ff; --c-champion: #ffb02e;
+  background: radial-gradient(680px 460px at 50% 42%, #3d4b40, #121a14);
+}
+.tu-card { color: #faf5e8; }
+.tu-kicker, .tu-sub { color: #cfd3c4; }
+.tu-arrow { color: #aab3a0; }
+.tu-ok.btn.primary { background: #f0eedf; color: #2e3730; border-color: #f0eedf; }
+.tu-ok.btn.primary:hover { background: #ffffff; }
