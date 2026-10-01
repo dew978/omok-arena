@@ -459,16 +459,18 @@
           <label>이름<input name="name" value="${esc(x.name)}" required></label>
           <label>점수<input name="score" type="number" value="${x.score}" required></label>
           <label>배치고사 완료 판 수 (0~5)<input name="placed" type="number" min="0" max="5" value="${x.placed || 0}"></label>
-          <label>이번 주 반영 경기 수<input name="week" type="number" min="0" value="${x.week && x.week.key === R.weekKey(B.now()) ? x.week.count : 0}"></label>
+          <label>오늘 반영 경기 수<input name="day" type="number" min="0" value="${R.dayCount(x, B.now())}"></label>
         </form>
         <p class="muted" style="font-size:.85em">점수를 직접 고치면 순위·티어가 바로 바뀌어요. 부정 경기 처리는 「경기 기록」의 무효 처리를 권장해요.</p>
         <div class="foot"><button class="btn ghost" data-close>취소</button><button class="btn primary" data-ok>저장</button></div>`);
       m.el.querySelector('[data-ok]').onclick = async () => {
         const f = m.el.querySelector('#ed');
         const placed = Math.max(0, Math.min(5, parseInt(f.placed.value, 10) || 0));
+        const now = B.now();
         await D.update('users/' + u, {
           name: f.name.value.trim() || x.name, score: parseInt(f.score.value, 10) || 0, placed,
-          week: { key: R.weekKey(B.now()), count: Math.max(0, parseInt(f.week.value, 10) || 0) }, scoreAt: B.now(),
+          // 오늘 둔 상대 순서(같은 상대 연속 수 계산용)는 그대로 두고 반영 경기 수만 고침
+          day: { key: R.dayKey(now), count: Math.max(0, parseInt(f.day.value, 10) || 0), opp: R.dayOpps(S.users[u], now) }, week: null, scoreAt: now,
         });
         m.close();
         toast('저장했어요.', 'good');
@@ -590,7 +592,7 @@
         if (d.counted) {
           cur.score = Math.max(0, (cur.score || 0) - d.delta);
           if (d.placement) cur.placed = Math.max(0, (cur.placed || 0) - 1);
-          else if (cur.week && cur.week.key === R.weekKey(x.ts) && cur.week.key === R.weekKey(now)) cur.week.count = Math.max(0, cur.week.count - 1);
+          else if (cur.day && cur.day.key === R.dayKey(x.ts) && cur.day.key === R.dayKey(now)) cur.day.count = Math.max(0, (cur.day.count || 0) - 1); // 오늘 둔 경기면 오늘 한도도 돌려줌
         }
         cur.rankGames = Math.max(0, (cur.rankGames || 0) - 1);
         if (!x.winner) cur.draws = Math.max(0, (cur.draws || 0) - 1);
@@ -613,8 +615,8 @@
     ['multSelect', '1:1 선택 매치 점수 배율', 'number', '랜덤보다 작게 (예: 0.7)'],
     ['multAssigned', '선생님 배정 매치 배율', 'number', ''],
     ['placementMult', '배치고사 배율', 'number', 'md 기준 1.2'],
-    ['sameOppStreak', '1:1 선택 매치 같은 상대 연속 n판째부터 승점 0', 'number', '진 사람만 하락. 기본 3'],
-    ['weeklyLimit', '주당 점수 반영 랭크전 수', 'number', '0이면 무제한. 초과분은 연습 경기(배치고사 제외)'],
+    ['sameOppStreak', '1:1 선택 매치: 하루에 같은 상대 연속 n판째부터 승점 0', 'number', '진 사람만 하락. 기본 3. 날짜가 바뀌면 다시 1판째부터 셈'],
+    ['dailyLimit', '하루 점수 반영 랭크전 수', 'number', '0이면 무제한. 초과분은 연습 경기(배치고사 제외). 날짜가 바뀌면 다시 0부터'],
     ['resignBase', '9수 미만 기권·시간패 기본점수', 'number', '너무 이른 기권으로 점수를 주고받는 것 방지'],
   ];
   SKELETON.settings = () => {
@@ -724,7 +726,7 @@
     if (reset) {
       const upd = {};
       for (const u of Object.keys(S.users)) {
-        Object.assign(upd, { [`users/${u}/score`]: R.START_SCORE, [`users/${u}/placed`]: 0, [`users/${u}/wins`]: 0, [`users/${u}/losses`]: 0, [`users/${u}/draws`]: 0, [`users/${u}/rankGames`]: 0, [`users/${u}/week`]: null, [`users/${u}/recentOpp`]: null, [`users/${u}/placedAt`]: null, [`users/${u}/scoreAt`]: null });
+        Object.assign(upd, { [`users/${u}/score`]: R.START_SCORE, [`users/${u}/placed`]: 0, [`users/${u}/wins`]: 0, [`users/${u}/losses`]: 0, [`users/${u}/draws`]: 0, [`users/${u}/rankGames`]: 0, [`users/${u}/day`]: null, [`users/${u}/week`]: null, [`users/${u}/recentOpp`]: null, [`users/${u}/placedAt`]: null, [`users/${u}/scoreAt`]: null });
       }
       await D.update('', upd);
     }

@@ -21,7 +21,7 @@
     pref: { aiLevel: 'normal', aiColor: 'black' },
     dismissed: {}, game: null, queue: null, queueData: {}, outInvite: null, inviteModal: null, settingUp: false,
   };
-  const settings = () => Object.assign({}, R.DEFAULT_SETTINGS, S.settingsRaw || {});
+  const settings = () => R.mergeSettings(S.settingsRaw);
 
   // 현재 반(classes/{cid}) 아래 경로로 읽고 쓰는 도우미
   const D = {
@@ -395,13 +395,13 @@
       const real = R.tierOf(me.score);
       const idx = R.TIERS.indexOf(real);
       const next = R.TIERS[idx + 1];
-      const wk = me.week && me.week.key === R.weekKey(B.now()) ? me.week.count : 0;
+      const today = R.dayCount(me, B.now());
       prof = `<div class="profile"><div class="big-emb">${emblem(t.id)}</div><div class="info">
         <div class="muted">현재 티어${t.id === 'champion' ? ` <span class="pill">점수 티어: ${real.name}</span>` : ''}</div>
         <div class="tier-name tier-color-${t.id}">${esc(t.name)}</div>
         <div class="score"><b>${me.score}</b>점 · 전체 <b>${myRank}</b>위</div>
         <div class="stats"><span>승 <b>${me.wins || 0}</b></span><span>패 <b>${me.losses || 0}</b></span><span>무 <b>${me.draws || 0}</b></span>
-        ${st.weeklyLimit > 0 ? `<span>이번 주 점수 반영 <b>${wk}/${st.weeklyLimit}</b></span>` : ''}</div>
+        ${st.dailyLimit > 0 ? `<span>오늘 점수 반영 <b>${today}/${st.dailyLimit}</b></span>` : ''}</div>
         ${next ? `<div class="muted" style="margin-top:6px;font-size:.88em">${next.name}까지 ${next.min - me.score}점</div><div class="progress"><i style="width:${Math.max(4, Math.min(100, ((me.score - (real.min === -Infinity ? next.min - 100 : real.min)) / (next.min - (real.min === -Infinity ? next.min - 100 : real.min))) * 100))}%"></i></div>` : ''}
         </div></div>`;
     }
@@ -513,9 +513,8 @@
     const me = S.users[S.uid];
     if (S.active[S.uid]) return toast('이미 참여 중인 경기가 있어요.');
     const st = settings();
-    const wk = me.week && me.week.key === R.weekKey(B.now()) ? me.week.count : 0;
-    if ((me.placed || 0) >= R.PLACEMENT_GAMES && st.weeklyLimit > 0 && wk >= st.weeklyLimit) {
-      if (!(await confirmBox('이번 주 점수 반영 횟수 초과', `이번 주 랭크전 ${st.weeklyLimit}경기를 모두 했어요. 계속하면 <b>점수가 반영되지 않는 연습 경기</b>로 기록돼요.`, '그래도 매칭'))) return;
+    if ((me.placed || 0) >= R.PLACEMENT_GAMES && st.dailyLimit > 0 && R.dayCount(me, B.now()) >= st.dailyLimit) {
+      if (!(await confirmBox('오늘 점수 반영 횟수 초과', `오늘 랭크전 ${st.dailyLimit}경기를 모두 했어요. 계속하면 <b>점수가 반영되지 않는 연습 경기</b>로 기록돼요. (내일 다시 ${st.dailyLimit}경기)`, '그래도 매칭'))) return;
     }
     const now = B.now();
     await D.set('queue/' + S.uid, { uid: S.uid, score: me.score, since: now });
@@ -596,7 +595,7 @@
       .sort((a, b) => ['idle', 'queue', 'game', 'off'].indexOf(status(a)) - ['idle', 'queue', 'game', 'off'].indexOf(status(b)) || String(S.users[a].name).localeCompare(S.users[b].name));
     const st = settings();
     const m = modal(`<h3>${kind === 'rank' ? '🤝 1:1 선택 매치 (랭크전)' : '👥 친구와 대전 (일반전)'}</h3>
-      <p class="muted" style="margin-top:-4px">${kind === 'rank' ? `점수 변동 ×${st.multSelect} · 같은 상대와 ${st.sameOppStreak}연속째부터는 이겨도 점수 없음(진 사람만 하락)` : '점수 변동 없음'}</p>
+      <p class="muted" style="margin-top:-4px">${kind === 'rank' ? `점수 변동 ×${st.multSelect} · 하루에 같은 상대와 ${st.sameOppStreak}연속째부터는 이겨도 점수 없음(진 사람만 하락)` : '점수 변동 없음'}</p>
       <div class="pick-list">${others.map((u) => {
         const s = status(u);
         return `<button class="pick-item" data-u="${u}" ${s !== 'idle' ? 'disabled' : ''}>${statusDot(u)}${nameTag(u)}<span class="st">${STATUS_KO[s]}</span></button>`;

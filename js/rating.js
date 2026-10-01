@@ -22,8 +22,8 @@
     multAssigned: 1.0,       // 선생님 배정 매치 배율
     multSelect: 0.7,         // 1:1 선택 매치 배율 (랜덤보다 작게)
     placementMult: 1.2,      // 배치고사 배율
-    sameOppStreak: 3,        // 1:1 선택 매치 연속 동일 상대 n판째부터 승자 0점
-    weeklyLimit: 4,          // 주당 점수 반영 정규 랭크전 수 (0=무제한)
+    sameOppStreak: 3,        // 1:1 선택 매치에서 하루에 같은 상대와 연속 n판째부터 승자 0점
+    dailyLimit: 4,           // 하루 점수 반영 정규 랭크전 수 (0=무제한)
     resignBase: 30,          // 9수 미만 기권·시간패 기본 점수
     showForbidden: 'normal', // 금수 자리 표시: all | normal | none
     confirmMove: true,       // 두 번 눌러 착수(태블릿 오터치 방지)
@@ -49,16 +49,23 @@
     return 0;
   }
 
-  // ISO 주차 키 (예: 2026-W39)
-  function weekKey(ts) {
-    const d = new Date(ts);
-    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    const day = t.getUTCDay() || 7;
-    t.setUTCDate(t.getUTCDate() + 4 - day);
-    const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
-    const w = Math.ceil(((t - y0) / 86400000 + 1) / 7);
-    return `${t.getUTCFullYear()}-W${String(w).padStart(2, '0')}`;
+  // 저장된 설정 + 기본값. 예전에 「주당 n경기」로 저장한 반은 같은 수를 「하루 n경기」로 이어 씀
+  function mergeSettings(raw) {
+    const s = Object.assign({}, DEFAULT_SETTINGS, raw || {});
+    if (raw && raw.dailyLimit === undefined && raw.weeklyLimit !== undefined) s.dailyLimit = raw.weeklyLimit;
+    delete s.weeklyLimit;
+    return s;
   }
+
+  // 날짜 키 (기기 시각 기준, 예: 2026-10-02) — 하루 한도와 같은 상대 연속 수는 자정에 새로 셈
+  function dayKey(ts) {
+    const d = new Date(ts);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  // 사용자 레코드의 오늘 기록: day = { key: 날짜, count: 점수 반영 정규전 수, opp: [오늘 랭크전 상대, 둔 순서대로] }
+  const todayOf = (u, now) => (u && u.day && u.day.key === dayKey(now) ? u.day : null);
+  const dayCount = (u, now) => { const d = todayOf(u, now); return d ? d.count || 0 : 0; };
+  const dayOpps = (u, now) => { const d = todayOf(u, now); return d && d.opp ? (Array.isArray(d.opp) ? d.opp : Object.values(d.opp)) : []; };
 
   // 같은 상대와의 연속 경기 수 (이번 경기 포함)
   function streakWith(recent, oppUid) {
@@ -75,7 +82,7 @@
      users: {uid: userRecord(경기 직전)}
      반환: {uid: {delta, counted, placement, note}} */
   function computeRank(game, users, settings, now) {
-    settings = Object.assign({}, DEFAULT_SETTINGS, settings || {});
+    settings = mergeSettings(settings);
     const res = game.result;
     const out = {};
     const ids = [game.black, game.white];
@@ -91,24 +98,23 @@
     const raw = B + C;
     const typeMult = game.matchType === 'select' ? settings.multSelect
       : game.matchType === 'assigned' ? settings.multAssigned : settings.multRandom;
-    const wk = weekKey(now);
 
+    // 같은 상대 연속 수는 오늘 둔 랭크전만 셈 (날짜가 바뀌면 다시 1판째)
     let streakZero = false;
     if (game.matchType === 'select') {
-      const s = Math.max(streakWith(users[winner].recentOpp, loser), streakWith(users[loser].recentOpp, winner));
+      const s = Math.max(streakWith(dayOpps(users[winner], now), loser), streakWith(dayOpps(users[loser], now), winner));
       if (s >= settings.sameOppStreak) streakZero = true;
     }
 
     for (const uid of [winner, loser]) {
       const u = users[uid];
       const placement = (u.placed || 0) < PLACEMENT_GAMES;
-      const weekCount = u.week && u.week.key === wk ? u.week.count : 0;
-      const overLimit = !placement && settings.weeklyLimit > 0 && weekCount >= settings.weeklyLimit;
+      const overLimit = !placement && settings.dailyLimit > 0 && dayCount(u, now) >= settings.dailyLimit;
       const mult = typeMult * (placement ? settings.placementMult : 1);
       let delta = Math.round(raw * mult);
       let note = '';
-      if (overLimit) { delta = 0; note = `주간 ${settings.weeklyLimit}경기 초과 — 연습 경기로 기록`; }
-      else if (uid === winner && streakZero) { delta = 0; note = `같은 상대 ${settings.sameOppStreak}연속 이상 — 승점 없음`; }
+      if (overLimit) { delta = 0; note = `하루 ${settings.dailyLimit}경기 초과 — 연습 경기로 기록`; }
+      else if (uid === winner && streakZero) { delta = 0; note = `오늘 같은 상대 ${settings.sameOppStreak}연속 이상 — 승점 없음`; }
       out[uid] = {
         delta: uid === winner ? delta : -delta,
         counted: !overLimit,
@@ -123,9 +129,7 @@
   // 사용자 레코드에 결과를 적용한 새 레코드 (트랜잭션 안에서 사용)
   function applyToUser(u, info, won, draw, oppUid, now) {
     u = Object.assign({}, u);
-    const wk = weekKey(now);
-    if (!u.week || u.week.key !== wk) u.week = { key: wk, count: 0 };
-    else u.week = Object.assign({}, u.week);
+    const day = { key: dayKey(now), count: dayCount(u, now), opp: dayOpps(u, now).slice(-19) };
     if (info.counted) {
       u.score = Math.max(0, (u.score ?? START_SCORE) + info.delta);
       if (info.delta) u.scoreAt = now;
@@ -135,8 +139,11 @@
           u.score = Math.min(PLACEMENT_CAP, u.score);
           u.placedAt = now;
         }
-      } else u.week.count += 1;
+      } else day.count += 1;
     }
+    day.opp.push(oppUid);
+    u.day = day;
+    delete u.week; // 예전 주간 기록은 더 쓰지 않음
     u.rankGames = (u.rankGames || 0) + 1;
     if (draw) u.draws = (u.draws || 0) + 1;
     else if (won) u.wins = (u.wins || 0) + 1;
@@ -169,6 +176,6 @@
 
   window.Rating = {
     TIERS, PLACEMENT_GAMES, PLACEMENT_CAP, START_SCORE, DEFAULT_SETTINGS,
-    tierOf, tierIndex, baseScore, correction, computeRank, applyToUser, championOf, displayTier, weekKey, streakWith,
+    tierOf, tierIndex, baseScore, correction, computeRank, applyToUser, championOf, displayTier, mergeSettings, dayKey, dayCount, dayOpps, streakWith,
   };
 })();
