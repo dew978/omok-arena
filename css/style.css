@@ -17,15 +17,21 @@
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; }
+html { background: #d9d8cd; }
 body {
   font-family: Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
-  background: radial-gradient(1200px 700px at 80% -10%, #1d2a57 0%, transparent 60%), radial-gradient(900px 600px at -10% 110%, #251a4d 0%, transparent 55%), var(--bg);
-  background-attachment: fixed;
+  background: transparent; /* 그림(body::before)이 가려지지 않게 — 바탕색은 html이 맡음 */
   color: var(--text);
   font-size: 16px;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior: none;
 }
+/* 배경: 한자 티어와 같은 수묵 산수 그림 + 옅은 안개 막. 화면에 고정 (iPad는 background-attachment: fixed를 무시해서 고정 레이어로 깔기) */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(#e5e5dc26, #e5e5dc26), url("../assets/ink-landscape.jpg") center / cover no-repeat, #d9d8cd;
+}
+@media (max-width: 680px) { body::before { background-position: 65% center; } }
 button, input, select, textarea { font: inherit; color: inherit; }
 .hidden { display: none !important; }
 .muted { color: var(--muted); }
